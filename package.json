@@ -18,7 +18,7 @@
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,html,md}\" \"docs/*.md\" README.md package.json dev-server.mjs",
     "typecheck:backend": "tsc --noEmit -p apps/backend/tsconfig.test.json",
     "lint:backend": "eslint apps/backend",
-    "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md}\" eslint.config.js \".github/**/*.yml\"",
+    "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md,yaml}\" eslint.config.js \".github/**/*.yml\"",
     "check:forbidden": "node --import tsx apps/backend/tools/check-forbidden.ts",
     "check:backend": "npm run typecheck:backend && npm run lint:backend && npm run format:check:backend && npm test && npm run check:forbidden",
     "prepare": "node apps/backend/tools/install-hooks.mjs"
@@ -43,11 +43,13 @@
     "@types/react-dom": "^19.0.0",
     "@types/sql.js": "1.4.11",
     "@vitejs/plugin-react": "^4.3.0",
+    "ajv": "8.20.0",
     "eslint": "10.10.0",
     "prettier": "^3.9.8",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "8.70.0",
-    "vite": "^6.1.0"
+    "vite": "^6.1.0",
+    "yaml": "2.9.1"
   }
 }

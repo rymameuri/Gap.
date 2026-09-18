@@ -1,0 +1,1138 @@
+openapi: 3.1.0
+info:
+  title: Gap backend API
+  version: 1.0.0
+  description: |
+    Contract between the backend and the frontend in apps/frontend. Paths,
+    field names and status codes follow what the frontend calls and reads.
+    Response objects may carry additional columns; fields the frontend relies
+    on are required, and fields that must never reach a client are forbidden
+    with `not`.
+
+    Authentication is the `gap_session` HttpOnly cookie set by
+    `POST /api/auth/login`. State-changing requests that carry an `Origin`
+    header must come from the API host, `APP_ORIGIN` or the frontend dev
+    origins.
+
+    Every error uses `ErrorBody`. Besides the statuses listed per operation,
+    any request can fail with 400 `invalid_json`, 413 `payload_too_large` or
+    500 `internal_error`, and any state-changing request with 403
+    `origin_not_allowed`. Every response carries `X-Request-Id`.
+servers:
+  - url: /
+tags:
+  - name: session
+  - name: classes
+  - name: teacher
+  - name: student
+
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      tags: [session]
+      security: []
+      responses:
+        "200":
+          description: Service status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, engine, database]
+                properties:
+                  ok: { const: true }
+                  engine: { $ref: "#/components/schemas/Engine" }
+                  database: { const: sqlite }
+
+  /api/auth/login:
+    post:
+      operationId: login
+      tags: [session]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, maxLength: 200 }
+                password: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "200":
+          description: Signed in. Sets the `gap_session` cookie.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/InvalidCredentials" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [session]
+      responses:
+        "200":
+          description: The signed-in user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /api/auth/logout:
+    post:
+      operationId: logout
+      tags: [session]
+      responses:
+        "200":
+          description: Session deleted and cookie cleared.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /api/classes:
+    get:
+      operationId: listClasses
+      tags: [classes]
+      description: Teachers get the classes they own; students get the classes they joined.
+      responses:
+        "200":
+          description: Class cards for the signed-in user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [courses]
+                properties:
+                  courses:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: "#/components/schemas/TeacherClassCard"
+                        - $ref: "#/components/schemas/StudentClassCard"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /api/teacher/workspace:
+    get:
+      operationId: getTeacherWorkspace
+      tags: [teacher]
+      parameters:
+        - name: classId
+          in: query
+          required: false
+          description: Defaults to the teacher's first class.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Everything the teacher workspace renders for one class.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/TeacherWorkspace"
+                  - $ref: "#/components/schemas/EmptyTeacherWorkspace"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes:
+    post:
+      operationId: createClass
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 3, maxLength: 150 }
+                syllabus: { type: string, maxLength: 50000, default: "" }
+      responses:
+        "201":
+          description: Class created with a unique join code.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, join_code]
+                properties:
+                  id: { type: string }
+                  join_code: { $ref: "#/components/schemas/JoinCode" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/teacher/classes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: updateClass
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, syllabus]
+              properties:
+                name: { type: string, minLength: 3, maxLength: 150 }
+                syllabus: { type: string, minLength: 10, maxLength: 50000 }
+      responses:
+        "200":
+          description: Name and syllabus saved; material_version incremented.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/enroll:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: enrollStudent
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          description: Student enrolled. Enrolling twice is a no-op.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/assessments:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: draftAssessment
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic]
+              properties:
+                topic: { type: string, minLength: 3, maxLength: 200 }
+      responses:
+        "202":
+          description: Draft generation queued. Poll the job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobAccepted" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/jobs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getJob
+      tags: [teacher]
+      description: Only the teacher who queued the job can read it.
+      responses:
+        "200":
+          description: Job status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/quizzes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: updateQuizDraft
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuizDraft" }
+      responses:
+        "200":
+          description: Draft saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/teacher/quizzes/{id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: publishQuiz
+      tags: [teacher]
+      responses:
+        "200":
+          description: Quiz visible to enrolled students.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/reviews/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: approveReview
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scores]
+              properties:
+                scores:
+                  description: Score per question id, between 0 and the question's maxPoints.
+                  type: object
+                  additionalProperties: { type: number, minimum: 0 }
+                feedback:
+                  type: string
+                  maxLength: 2000
+                  default: Reviewed by teacher.
+      responses:
+        "200":
+          description: Grade published to the student.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/teacher/gaps/{id}/explainer:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: prepareExplainer
+      tags: [teacher]
+      responses:
+        "202":
+          description: Explanation generation queued. Poll the job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobAccepted" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/interventions/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: updateIntervention
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 30, maxLength: 8000 }
+      responses:
+        "200":
+          description: Draft explanation saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/teacher/interventions/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: approveIntervention
+      tags: [teacher]
+      responses:
+        "200":
+          description: Explanation shared with the targeted students.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/student/classes/join:
+    post:
+      operationId: joinClass
+      tags: [student]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  description: Case-insensitive; surrounding whitespace is ignored.
+                  type: string
+      responses:
+        "200":
+          description: Already a member.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinResult" }
+        "201":
+          description: Joined.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/student/workspace:
+    get:
+      operationId: getStudentWorkspace
+      tags: [student]
+      parameters:
+        - name: classId
+          in: query
+          required: false
+          description: Limits gaps, quizzes, grades and progress to one joined class.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Everything the student workspace renders.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentWorkspace" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/student/quizzes/{id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: submitQuiz
+      tags: [student]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  description: Answer per question id. Every question needs a non-empty answer; choice answers must match an option.
+                  type: object
+                  additionalProperties: { type: string, maxLength: 4000 }
+      responses:
+        "201":
+          description: Graded, or held for teacher review when grading is uncertain.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/SubmissionGraded"
+                  - $ref: "#/components/schemas/SubmissionPending"
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/student/gaps/{id}/recheck:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: recheckGap
+      tags: [student]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer:
+                  description: Must be one of the follow-up question's options.
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Follow-up answer recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [correct, status, message]
+                properties:
+                  correct: { type: boolean }
+                  status: { enum: [resolved, struggling] }
+                  message: { type: string }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/student/questions:
+    post:
+      operationId: askQuestion
+      tags: [student]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [classId, text]
+              properties:
+                classId: { type: string }
+                text: { type: string, minLength: 5, maxLength: 2000 }
+      responses:
+        "201":
+          description: Question shared with the teacher.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: gap_session
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    ValidationFailed:
+      description: The request body or parameters are invalid.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    Unauthenticated:
+      description: No valid session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    InvalidCredentials:
+      description: Email or password is incorrect.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    Forbidden:
+      description: The signed-in role cannot use this endpoint.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    NotFound:
+      description: The resource does not exist or belongs to someone else.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    Conflict:
+      description: The resource is not in a state that allows this action.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    RateLimited:
+      description: Too many attempts from this client in the last minute.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+
+  schemas:
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [error, code]
+      properties:
+        error: { type: string, minLength: 1 }
+        code:
+          enum:
+            - bad_request
+            - validation_failed
+            - invalid_json
+            - payload_too_large
+            - unauthenticated
+            - invalid_credentials
+            - forbidden
+            - origin_not_allowed
+            - not_found
+            - conflict
+            - rate_limited
+            - internal_error
+
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok: { const: true }
+
+    Engine:
+      enum: [local, live-ai]
+
+    Timestamp:
+      type: string
+      pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+
+    JoinCode:
+      type: string
+      pattern: "^[A-Z2-9]{8}$"
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { enum: [teacher, student] }
+
+    Course:
+      type: object
+      required: [id, name, syllabus, material_version]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        syllabus: { type: string }
+        material_version: { type: integer, minimum: 1 }
+        join_code: { $ref: "#/components/schemas/JoinCode" }
+
+    TeacherClassCard:
+      allOf:
+        - $ref: "#/components/schemas/Course"
+        - type: object
+          required: [join_code, students]
+          properties:
+            students: { type: integer, minimum: 0 }
+
+    StudentClassCard:
+      allOf:
+        - $ref: "#/components/schemas/Course"
+        - type: object
+          required: [teacher_name]
+          properties:
+            teacher_name: { type: string }
+          not:
+            anyOf:
+              - type: object
+                required: [join_code]
+              - type: object
+                required: [students]
+
+    Question:
+      type: object
+      required:
+        [id, prompt, topic, tag, section, kind, options, rubric, maxPoints]
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        topic: { type: string }
+        tag: { type: string }
+        section: { type: string }
+        kind: { enum: [choice, text] }
+        options: { type: array, items: { type: string } }
+        correctAnswer: { type: string }
+        keywords: { type: array, items: { type: string } }
+        rubric: { type: string }
+        maxPoints: { type: integer, minimum: 1 }
+
+    TeacherQuestion:
+      allOf:
+        - $ref: "#/components/schemas/Question"
+        - type: object
+          required: [correctAnswer, keywords]
+
+    PublicQuestion:
+      description: A question as students see it; answer keys and grading keywords are removed.
+      allOf:
+        - $ref: "#/components/schemas/Question"
+        - not:
+            anyOf:
+              - type: object
+                required: [correctAnswer]
+              - type: object
+                required: [keywords]
+
+    QuizDraft:
+      type: object
+      required: [title, questions]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        questions:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { $ref: "#/components/schemas/TeacherQuestion" }
+
+    QuizStatus:
+      enum: [draft, published]
+
+    GradeResult:
+      type: object
+      required: [questionId, score, confidence, tag, reason]
+      properties:
+        questionId: { type: string }
+        score: { type: number, minimum: 0 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        tag: { type: [string, "null"] }
+        reason: { type: string }
+
+    GapStatus:
+      enum: [open, ready, struggling, resolved]
+
+    TeacherGap:
+      type: object
+      required:
+        [
+          id,
+          class_id,
+          student_id,
+          student_name,
+          topic,
+          tag,
+          section,
+          status,
+          source,
+        ]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        student_id: { type: string }
+        student_name: { type: string }
+        topic: { type: string }
+        tag: { type: string }
+        section: { type: string }
+        status: { $ref: "#/components/schemas/GapStatus" }
+        source: { type: string }
+
+    StudentGap:
+      type: object
+      required:
+        [
+          id,
+          class_id,
+          student_id,
+          class_name,
+          topic,
+          tag,
+          section,
+          status,
+          source,
+          content,
+          probe,
+        ]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        student_id: { type: string }
+        class_name: { type: string }
+        topic: { type: string }
+        tag: { type: string }
+        section: { type: string }
+        status: { $ref: "#/components/schemas/GapStatus" }
+        source: { type: string }
+        content:
+          description: Teacher-approved explanation, or null until one is shared.
+          type: [string, "null"]
+        probe:
+          description: Follow-up question for the approved explanation, or null.
+          oneOf:
+            - $ref: "#/components/schemas/PublicQuestion"
+            - type: "null"
+
+    Cluster:
+      type: object
+      required: [topic, tag, section, gapId, students, priority, struggling]
+      properties:
+        topic: { type: string }
+        tag: { type: string }
+        section: { type: string }
+        gapId: { type: string }
+        students: { type: integer, minimum: 1 }
+        priority: { type: integer, minimum: 0 }
+        struggling: { type: integer, minimum: 0 }
+
+    RosterEntry:
+      type: object
+      required: [id, name, email, open_gaps, activity]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        open_gaps: { type: integer, minimum: 0 }
+        activity: { type: integer, minimum: 0 }
+
+    TeacherQuiz:
+      type: object
+      required:
+        [id, class_id, title, questions, status, engine, submissions, flagged]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        title: { type: string }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/TeacherQuestion" }
+        status: { $ref: "#/components/schemas/QuizStatus" }
+        engine: { $ref: "#/components/schemas/Engine" }
+        submissions: { type: integer, minimum: 0 }
+        flagged: { type: integer, minimum: 0 }
+
+    Review:
+      type: object
+      required:
+        [
+          id,
+          student_name,
+          quiz_title,
+          questions,
+          answers,
+          results,
+          score,
+          total,
+          confidence,
+          reason,
+        ]
+      properties:
+        id: { type: string }
+        student_name: { type: string }
+        quiz_title: { type: string }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/TeacherQuestion" }
+        answers:
+          type: object
+          additionalProperties: { type: string }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/GradeResult" }
+        score: { type: number, minimum: 0 }
+        total: { type: number, minimum: 0 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        reason: { type: string }
+
+    Intervention:
+      type: object
+      required: [id, topic, tag, content, probe, targets, status, engine]
+      properties:
+        id: { type: string }
+        topic: { type: string }
+        tag: { type: string }
+        content: { type: string }
+        probe: { $ref: "#/components/schemas/TeacherQuestion" }
+        targets: { type: array, items: { type: string } }
+        status: { enum: [draft, approved] }
+        engine: { $ref: "#/components/schemas/Engine" }
+
+    AgentEvent:
+      type: object
+      required: [id, agent, action, details, created_at, job_id]
+      properties:
+        id: { type: string }
+        agent: { type: string }
+        action: { type: string }
+        details: { type: object }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        job_id: { type: [string, "null"] }
+
+    AskedQuestion:
+      type: object
+      required: [id, text, student_name]
+      properties:
+        id: { type: string }
+        text: { type: string }
+        student_name: { type: string }
+
+    JobSummary:
+      type: object
+      required: [id, kind, status, error, created_at]
+      properties:
+        id: { type: string }
+        kind: { enum: [assessment, content] }
+        status: { $ref: "#/components/schemas/JobStatus" }
+        error: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    TeacherWorkspace:
+      type: object
+      required:
+        [
+          classes,
+          course,
+          clusters,
+          gaps,
+          roster,
+          quizzes,
+          reviews,
+          interventions,
+          events,
+          asked,
+          engine,
+          jobs,
+        ]
+      properties:
+        classes:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/Course" }
+        course: { $ref: "#/components/schemas/Course" }
+        clusters:
+          { type: array, items: { $ref: "#/components/schemas/Cluster" } }
+        gaps:
+          { type: array, items: { $ref: "#/components/schemas/TeacherGap" } }
+        roster:
+          type: array
+          items: { $ref: "#/components/schemas/RosterEntry" }
+        quizzes:
+          type: array
+          items: { $ref: "#/components/schemas/TeacherQuiz" }
+        reviews: { type: array, items: { $ref: "#/components/schemas/Review" } }
+        interventions:
+          type: array
+          items: { $ref: "#/components/schemas/Intervention" }
+        events:
+          type: array
+          maxItems: 60
+          items: { $ref: "#/components/schemas/AgentEvent" }
+        asked:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/AskedQuestion" }
+        engine: { $ref: "#/components/schemas/Engine" }
+        jobs:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/JobSummary" }
+
+    EmptyTeacherWorkspace:
+      description: Returned when the teacher owns no classes.
+      type: object
+      additionalProperties: false
+      required: [classes, course]
+      properties:
+        classes: { type: array, maxItems: 0 }
+        course: { type: "null" }
+
+    StudentSubmissionSummary:
+      oneOf:
+        - type: object
+          description: Held for review. The score stays hidden until a teacher approves it.
+          required: [id, status]
+          properties:
+            id: { type: string }
+            status: { const: pending }
+          not:
+            anyOf:
+              - type: object
+                required: [score]
+              - type: object
+                required: [total]
+        - type: object
+          required: [id, status, score, total]
+          properties:
+            id: { type: string }
+            status: { enum: [graded, reviewed] }
+            score: { type: number, minimum: 0 }
+            total: { type: number, minimum: 0 }
+
+    StudentQuiz:
+      type: object
+      required: [id, class_id, class_name, title, questions, status, engine]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        class_name: { type: string }
+        title: { type: string }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/PublicQuestion" }
+        status: { const: published }
+        engine: { $ref: "#/components/schemas/Engine" }
+        submission:
+          description: Present once the student has submitted.
+          $ref: "#/components/schemas/StudentSubmissionSummary"
+
+    StudentGrade:
+      type: object
+      required:
+        [
+          id,
+          quiz_id,
+          class_id,
+          created_at,
+          title,
+          score,
+          total,
+          reason,
+          results,
+        ]
+      properties:
+        id: { type: string }
+        quiz_id: { type: string }
+        class_id: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        title: { type: string }
+        score: { type: number, minimum: 0 }
+        total: { type: number, minimum: 0 }
+        reason: { type: string }
+        status: { enum: [graded, reviewed] }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/GradeResult" }
+
+    ProgressEntry:
+      type: object
+      required: [id, gap_id, class_id, topic, correct, created_at]
+      properties:
+        id: { type: string }
+        gap_id: { type: string }
+        class_id: { type: string }
+        topic: { type: string }
+        correct: { enum: [0, 1] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    StudentWorkspace:
+      type: object
+      required: [courses, gaps, quizzes, grades, progress, engine]
+      properties:
+        courses: { type: array, items: { $ref: "#/components/schemas/Course" } }
+        gaps:
+          { type: array, items: { $ref: "#/components/schemas/StudentGap" } }
+        quizzes:
+          type: array
+          items: { $ref: "#/components/schemas/StudentQuiz" }
+        grades:
+          type: array
+          items: { $ref: "#/components/schemas/StudentGrade" }
+        progress:
+          type: array
+          items: { $ref: "#/components/schemas/ProgressEntry" }
+        engine: { $ref: "#/components/schemas/Engine" }
+
+    JoinResult:
+      type: object
+      required: [id, name, alreadyJoined]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        alreadyJoined: { type: boolean }
+
+    JobAccepted:
+      type: object
+      required: [jobId]
+      properties:
+        jobId: { type: string }
+
+    JobStatus:
+      enum: [queued, running, succeeded, failed]
+
+    Job:
+      type: object
+      required: [id, kind, status, error, result]
+      properties:
+        id: { type: string }
+        kind: { enum: [assessment, content] }
+        status: { $ref: "#/components/schemas/JobStatus" }
+        error: { type: [string, "null"] }
+        result:
+          oneOf:
+            - type: "null"
+            - type: object
+              additionalProperties: false
+              required: [quizId]
+              properties:
+                quizId: { type: string }
+            - type: object
+              additionalProperties: false
+              required: [interventionId]
+              properties:
+                interventionId: { type: string }
+      not:
+        type: object
+        required: [payload]
+
+    SubmissionGraded:
+      type: object
+      required: [id, status, score, total, results]
+      properties:
+        id: { type: string }
+        status: { const: graded }
+        score: { type: number, minimum: 0 }
+        total: { type: number, minimum: 0 }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/GradeResult" }
+
+    SubmissionPending:
+      type: object
+      required: [id, status, message]
+      properties:
+        id: { type: string }
+        status: { const: pending }
+        message: { type: string }
+      not:
+        anyOf:
+          - type: object
+            required: [score]
+          - type: object
+            required: [total]
+          - type: object
+            required: [results]
+
+security:
+  - session: []

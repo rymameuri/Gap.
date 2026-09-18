@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import type { Server } from "node:http";
+import type { Express } from "express";
 import { createApp } from "../src/app.js";
 import { loadConfig, type Config } from "../src/config.js";
 import { openStore, type Store } from "../src/db.js";
@@ -15,6 +16,7 @@ export interface TestResponse {
 }
 
 export interface TestServer {
+  readonly app: Express;
   readonly config: Config;
   readonly store: Store;
   /** Parsed JSON log records written by the app logger. */
@@ -53,7 +55,8 @@ export async function startTestServer(
       logs.push(JSON.parse(line) as Record<string, unknown>);
     },
   });
-  const server = createApp({ store, config, logger }).listen(0, "127.0.0.1");
+  const app = createApp({ store, config, logger });
+  const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const baseUrl = `http://127.0.0.1:${String(listeningPort(server))}`;
 
@@ -80,6 +83,7 @@ export async function startTestServer(
   };
 
   return {
+    app,
     config,
     store,
     logs,
