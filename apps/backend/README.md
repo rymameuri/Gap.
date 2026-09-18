@@ -32,6 +32,7 @@ The server reads environment variables once at startup through `loadConfig` in `
 | `DATABASE_PATH` | `.runtime/gap.sqlite`             |                                                                       |
 | `DEMO_PASSWORD` | `GapDemo!2026` outside production | Required in production. Minimum 8 characters                          |
 | `LOG_LEVEL`     | `info`                            | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`        |
+| `TRUST_PROXY`   | `0`                               | Number of reverse proxies in front of the app, 0 to 10                |
 
 The model provider variables in `.env.example` are read by `src/agents` and documented there by the agents team.
 
@@ -91,6 +92,43 @@ Routes throw the typed errors in `src/errors.ts`; `errorHandler` in `src/http/mi
 
 Logs are JSON lines on stdout (pino). Each request gets an id, returned in the `X-Request-Id` response header and attached to every log line for that request. A well-formed incoming `X-Request-Id` is reused. One `request completed` line is written per request with method, path (without query string), status, duration and user id. Password, token, cookie and authorization fields are redacted.
 
+## Operations
+
+### Local development
+
+```sh
+npm ci
+npm run dev
+```
+
+The frontend runs on `WEB_PORT` (3000) and proxies `/api` to the backend on `API_PORT` (3001). On start the backend applies pending migrations and, when the database has no users, seeds the demo course and accounts.
+
+### Production
+
+1. `npm ci`, then `npm run build`. The build compiles the frontend into `dist` and the backend into `apps/backend/build`.
+2. Set `NODE_ENV=production`, `DEMO_PASSWORD`, `DATABASE_PATH` on a persistent disk, and `API_HOST`/`API_PORT`. Behind a load balancer or platform router, set `TRUST_PROXY` to the number of proxies. Without it, every client shares one rate limit, and writes from the app's own https origin are refused unless `APP_ORIGIN` names it.
+3. `npm start`. It migrates the database, then serves the API and the built frontend from one process.
+
+Run exactly one process per database file. sql.js keeps the database in memory and writes the file on every change, and the agent queue runs in process, so replicas would overwrite each other.
+
+### Health and logs
+
+`GET /api/health` needs no session and returns `{ "ok": true, "engine": "local" | "live-ai", "database": "sqlite" }`. Logs are JSON lines on stdout. Use the `X-Request-Id` of a response to find its log lines. `level` 50 marks unexpected errors, logged with their stack.
+
+### Backup and restore
+
+The database is the single file at `DATABASE_PATH`. Every change writes a temporary file and renames it over the original, so copying the file at any time gives a consistent backup. To restore, stop the server, replace the file, and start it. A backup from older code is migrated on start. A backup from newer code is refused (see below).
+
+### Troubleshooting
+
+| Log message                    | Meaning and action                                                                                                                             |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid configuration`        | `issues` lists every invalid or missing variable. Fix them and restart.                                                                        |
+| `database migration refused`   | The database was migrated by newer code. Deploy that version, or restore a backup made by this version.                                        |
+| `X-Forwarded-For received ...` | A proxy is in front of the app but `TRUST_PROXY` is 0. Set it to the number of proxies.                                                        |
+| `agent task failed`            | A quiz or explanation job failed. `err` holds the cause; the job and the class activity feed show the message. The teacher can queue it again. |
+| `agent queue stopped`          | The queue hit a database error. Restart the process; queued and interrupted jobs run again.                                                    |
+
 ## Checks
 
 Run all backend checks from the repository root:
@@ -99,13 +137,14 @@ Run all backend checks from the repository root:
 npm run check:backend
 ```
 
-| Script                         | Scope                                                    |
-| ------------------------------ | -------------------------------------------------------- |
-| `npm run typecheck:backend`    | Backend sources, tests and tools under strict TypeScript |
-| `npm run lint:backend`         | ESLint with typescript-eslint strict type-checked rules  |
-| `npm run format:check:backend` | Prettier on backend files                                |
-| `npm test`                     | Backend and tool tests (`node:test`, Node 22 or later)   |
-| `npm run check:forbidden`      | Forbidden characters and phrases in backend-owned files  |
+| Script                         | Scope                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `npm run typecheck:backend`    | Backend sources, tests and tools under strict TypeScript                                      |
+| `npm run lint:backend`         | ESLint with typescript-eslint strict type-checked rules                                       |
+| `npm run format:check:backend` | Prettier on backend files                                                                     |
+| `npm test`                     | Backend and tool tests (`node:test`, Node 22 or later)                                        |
+| `npm run test:coverage`        | The same tests with coverage thresholds: 95% lines, 90% branches, 95% functions. CI runs this |
+| `npm run check:forbidden`      | Forbidden characters and phrases in backend-owned files                                       |
 
 `src/agents/` is owned by the agents team and is excluded from lint and the forbidden-character scan.
 
