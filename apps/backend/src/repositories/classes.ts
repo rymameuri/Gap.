@@ -52,9 +52,18 @@ export const findOwnedClass = (
 export const teacherClasses = (store: Store, teacherId: string): ClassRow[] =>
   store.all<ClassRow>("SELECT * FROM classes WHERE teacher_id=?", [teacherId]);
 
-export const memberClasses = (store: Store, studentId: string): ClassRow[] =>
-  store.all<ClassRow>(
-    "SELECT c.* FROM memberships m JOIN classes c ON c.id=m.class_id WHERE m.student_id=?",
+// Students see only what they need; join codes and teacher ids stay private.
+export type StudentCourse = Pick<
+  ClassRow,
+  "id" | "name" | "syllabus" | "material_version"
+>;
+
+export const memberClasses = (
+  store: Store,
+  studentId: string,
+): StudentCourse[] =>
+  store.all<StudentCourse>(
+    "SELECT c.id,c.name,c.syllabus,c.material_version FROM memberships m JOIN classes c ON c.id=m.class_id WHERE m.student_id=?",
     [studentId],
   );
 
