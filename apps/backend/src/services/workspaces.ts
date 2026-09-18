@@ -18,6 +18,7 @@ import {
   memberClasses,
   teacherClasses,
   type RosterEntry,
+  type StudentCourse,
 } from "../repositories/classes.js";
 import {
   classQuizzes,
@@ -157,7 +158,7 @@ export type StudentGradeView = Omit<StudentGradeRow, "answers" | "results"> & {
 };
 
 export interface StudentWorkspace {
-  courses: ClassRow[];
+  courses: StudentCourse[];
   gaps: StudentGapView[];
   quizzes: StudentQuizView[];
   grades: StudentGradeView[];

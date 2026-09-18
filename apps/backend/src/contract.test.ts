@@ -362,6 +362,11 @@ describe("API contract", () => {
         `/api/teacher/quizzes/${MISSING}/publish`,
         { cookie: teacher },
       );
+      await call(
+        "POST /api/teacher/quizzes/{id}/publish",
+        `/api/teacher/quizzes/${SEED_QUIZ}/publish`,
+        { cookie: teacher },
+      );
     });
 
     test("submit graded, pending, invalid, missing and duplicate answers", async () => {
@@ -548,6 +553,34 @@ describe("API contract", () => {
       await call("POST /api/student/gaps/{id}/recheck", path, {
         cookie: omar,
         body: { answer: option },
+      });
+    });
+
+    test("a resolved gap cannot be rechecked again", async () => {
+      const gaps = list<StudentGap>(
+        await call("GET /api/student/workspace", "/api/student/workspace", {
+          cookie: omar,
+        }),
+        "gaps",
+      );
+      const gap = gaps.find(
+        (item) => item.topic === "Force and motion" && item.probe !== null,
+      );
+      assert.ok(gap);
+      const path = `/api/student/gaps/${gap.id}/recheck`;
+      const answer = { answer: "No net force is required" };
+      const first = await call("POST /api/student/gaps/{id}/recheck", path, {
+        cookie: omar,
+        body: answer,
+      });
+      assert.equal(stringField(first, "status"), "resolved");
+      const again = await call("POST /api/student/gaps/{id}/recheck", path, {
+        cookie: omar,
+        body: answer,
+      });
+      assert.deepEqual(again, {
+        error: "This gap is already resolved.",
+        code: "conflict",
       });
     });
 

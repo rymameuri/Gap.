@@ -94,7 +94,7 @@ export interface RecheckOutcome {
 /**
  * Records a follow-up answer for the student's own gap. A correct answer
  * resolves the gap; a wrong one marks it struggling for teacher support.
- * @throws NotFoundError without an approved explanation, ZodError or
+ * @throws NotFoundError without an approved explanation, ConflictError once resolved, ZodError or
  * BadRequestError when the answer is not an option.
  */
 export function recheckGap(
@@ -105,6 +105,8 @@ export function recheckGap(
 ): RecheckOutcome {
   const gap = findApprovedGapForStudent(store, gapId, studentId);
   if (!gap) throw new NotFoundError("Teacher-approved explanation not found.");
+  if (gap.status === "resolved")
+    throw new ConflictError("This gap is already resolved.");
   const { answer } = recheckBody.parse(input);
   const probe = parseQuestion(gap.probe);
   if (!probe.options.includes(answer))

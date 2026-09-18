@@ -302,6 +302,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /api/teacher/reviews/{id}:
     parameters:
@@ -516,6 +517,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /api/student/questions:
     post:
@@ -651,6 +653,17 @@ components:
         syllabus: { type: string }
         material_version: { type: integer, minimum: 1 }
         join_code: { $ref: "#/components/schemas/JoinCode" }
+
+    StudentCourse:
+      description: A joined class as students see it. Join codes and teacher ids stay private.
+      allOf:
+        - $ref: "#/components/schemas/Course"
+        - not:
+            anyOf:
+              - type: object
+                required: [join_code]
+              - type: object
+                required: [teacher_id]
 
     TeacherClassCard:
       allOf:
@@ -1050,7 +1063,9 @@ components:
       type: object
       required: [courses, gaps, quizzes, grades, progress, engine]
       properties:
-        courses: { type: array, items: { $ref: "#/components/schemas/Course" } }
+        courses:
+          type: array
+          items: { $ref: "#/components/schemas/StudentCourse" }
         gaps:
           { type: array, items: { $ref: "#/components/schemas/StudentGap" } }
         quizzes:

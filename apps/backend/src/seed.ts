@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hashPassword, type Store } from "./db.js";
+import { classCode } from "./join-codes.js";
 import type { Question } from "./agents/schemas.js";
 export const initialTopics = [
   {
@@ -154,13 +155,14 @@ export function seed(store: Store, demoPassword: string): void {
         password,
       ]);
     store.run(
-      "INSERT INTO classes(id,teacher_id,name,syllabus,material_version) VALUES(?,?,?,?,?)",
+      "INSERT INTO classes(id,teacher_id,name,syllabus,material_version,join_code) VALUES(?,?,?,?,?,?)",
       [
         DEMO_CLASS,
         DEMO_TEACHER,
         "Introduction to Physics",
         "Unit 1: Forces and motion - Newton's laws\nUnit 2: Energy and work - Conservation of energy\nUnit 3: Electric circuits - Series circuits",
         1,
+        classCode(store),
       ],
     );
     for (const student of DEMO_STUDENTS)
