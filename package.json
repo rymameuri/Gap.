@@ -18,7 +18,7 @@
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,html,md}\" \"docs/*.md\" README.md package.json dev-server.mjs",
     "typecheck:backend": "tsc --noEmit -p apps/backend/tsconfig.test.json",
     "lint:backend": "eslint apps/backend",
-    "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md}\" eslint.config.js \".github/**/*.yml\"",
+    "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md,yaml}\" eslint.config.js \".github/**/*.yml\"",
     "check:forbidden": "node --import tsx apps/backend/tools/check-forbidden.ts",
     "check:backend": "npm run typecheck:backend && npm run lint:backend && npm run format:check:backend && npm test && npm run check:forbidden",
     "prepare": "node apps/backend/tools/install-hooks.mjs"
