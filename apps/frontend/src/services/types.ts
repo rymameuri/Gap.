@@ -55,6 +55,7 @@ export type Course = {
   name: string;
   syllabus: string;
   material_version: number;
+  join_code?: string;
 };
 export type GradeResult = {
   questionId: string;

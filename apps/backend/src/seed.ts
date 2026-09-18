@@ -121,13 +121,16 @@ export function seed(store: Store) {
         password,
       ]),
     );
-    store.run("INSERT INTO classes VALUES(?,?,?,?,?)", [
-      "physics",
-      "teacher",
-      "Introduction to Physics",
-      "Unit 1: Forces and motion - Newton’s laws\nUnit 2: Energy and work - Conservation of energy\nUnit 3: Electric circuits - Series circuits",
-      1,
-    ]);
+    store.run(
+      "INSERT INTO classes(id,teacher_id,name,syllabus,material_version) VALUES(?,?,?,?,?)",
+      [
+        "physics",
+        "teacher",
+        "Introduction to Physics",
+        "Unit 1: Forces and motion - Newton’s laws\nUnit 2: Energy and work - Conservation of energy\nUnit 3: Electric circuits - Series circuits",
+        1,
+      ],
+    );
     ids.forEach((id) =>
       store.run("INSERT INTO memberships VALUES(?,?)", ["physics", id]),
     );

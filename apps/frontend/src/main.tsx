@@ -11,6 +11,7 @@ import { SessionProvider, useSession } from "./services/session";
 import { NoticeProvider } from "./components/ui";
 import { TeacherLayout, StudentLayout } from "./layouts/workspace";
 import { Login } from "./pages/auth/Login";
+import { ClassDashboard } from "./pages/ClassDashboard";
 import { Landing } from "./pages/Landing";
 import {
   Overview,
@@ -80,11 +81,27 @@ createRoot(document.getElementById("root")!).render(
             path="/teacher"
             element={
               <Guard role="teacher">
+                <ClassDashboard role="teacher" />
+              </Guard>
+            }
+          />
+          <Route
+            path="/student"
+            element={
+              <Guard role="student">
+                <ClassDashboard role="student" />
+              </Guard>
+            }
+          />
+          <Route
+            path="/teacher"
+            element={
+              <Guard role="teacher">
                 <TeacherLayout />
               </Guard>
             }
           >
-            <Route index element={<Overview />} />
+            <Route path="overview" element={<Overview />} />
             <Route path="assessments" element={<Assessments />} />
             <Route path="review" element={<ReviewQueue />} />
             <Route path="content" element={<ContentStudio />} />
@@ -99,7 +116,7 @@ createRoot(document.getElementById("root")!).render(
               </Guard>
             }
           >
-            <Route index element={<MyLearning />} />
+            <Route path="learning" element={<MyLearning />} />
             <Route path="gaps/:id" element={<Lesson />} />
             <Route path="assessments" element={<StudentAssessments />} />
             <Route path="progress" element={<Progress />} />

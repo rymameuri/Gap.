@@ -2,7 +2,7 @@ import express, { type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Store, Row } from "./db.js";
+import { classCode, type Store, type Row } from "./db.js";
 import {
   authenticated,
   teacherOnly,
@@ -203,21 +203,19 @@ export function createApp(store: Store) {
       const body = z
           .object({
             name: z.string().min(3).max(150),
-            syllabus: z.string().min(10).max(50000),
+            syllabus: z.string().max(50000).default(""),
           })
           .parse(req.body),
-        id = randomUUID();
+        id = randomUUID(),
+        joinCode = classCode(store);
       store.transaction(() => {
-        store.run("INSERT INTO classes VALUES(?,?,?,?,?)", [
-          id,
-          req.user.id,
-          body.name,
-          body.syllabus,
-          1,
-        ]);
+        store.run(
+          "INSERT INTO classes(id,teacher_id,name,syllabus,material_version,join_code) VALUES(?,?,?,?,?,?)",
+          [id, req.user.id, body.name, body.syllabus, 1, joinCode],
+        );
         store.event(id, "Teacher", "Class created", { name: body.name });
       });
-      res.status(201).json({ id });
+      res.status(201).json({ id, join_code: joinCode });
     }),
   );
   app.put(
@@ -254,11 +252,9 @@ export function createApp(store: Store) {
         [email.toLowerCase()],
       );
       if (!user) {
-        res
-          .status(404)
-          .json({
-            error: "Student account not found. Use a seeded demo account.",
-          });
+        res.status(404).json({
+          error: "Student account not found. Use a seeded demo account.",
+        });
         return;
       }
       store.run("INSERT OR IGNORE INTO memberships VALUES(?,?)", [
@@ -276,11 +272,9 @@ export function createApp(store: Store) {
       const body = z
         .object({ topic: z.string().min(3).max(200) })
         .parse(req.body);
-      res
-        .status(202)
-        .json({
-          jobId: queue.enqueue(req.params.id, req.user.id, "assessment", body),
-        });
+      res.status(202).json({
+        jobId: queue.enqueue(req.params.id, req.user.id, "assessment", body),
+      });
     }),
   );
   app.get("/api/teacher/jobs/:id", teacherOnly, (req, res) => {
@@ -431,13 +425,11 @@ export function createApp(store: Store) {
         return;
       }
       ownClass(req.user.id, gap.class_id);
-      res
-        .status(202)
-        .json({
-          jobId: queue.enqueue(gap.class_id, req.user.id, "content", {
-            gapId: gap.id,
-          }),
-        });
+      res.status(202).json({
+        jobId: queue.enqueue(gap.class_id, req.user.id, "content", {
+          gapId: gap.id,
+        }),
+      });
     }),
   );
   app.put(
@@ -507,6 +499,80 @@ export function createApp(store: Store) {
       res.json({ ok: true });
     }),
   );
+  app.get("/api/classes", (req, res) => {
+    const courses =
+      req.user.role === "teacher"
+        ? store.all(
+            "SELECT c.*, (SELECT COUNT(*) FROM memberships m WHERE m.class_id=c.id) AS students FROM classes c WHERE c.teacher_id=?",
+            [req.user.id],
+          )
+        : store.all(
+            "SELECT c.id,c.name,c.syllabus,c.material_version,u.name AS teacher_name FROM classes c JOIN memberships m ON m.class_id=c.id JOIN users u ON u.id=c.teacher_id WHERE m.student_id=?",
+            [req.user.id],
+          );
+    if (req.user.role === "teacher")
+      for (const course of courses)
+        if (!course.join_code) {
+          course.join_code = classCode(store);
+          store.run("UPDATE classes SET join_code=? WHERE id=?", [
+            course.join_code,
+            course.id,
+          ]);
+        }
+    res.json({ courses });
+  });
+  const joinLimit = rateLimit({
+    windowMs: 60000,
+    limit: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.post(
+    "/api/student/classes/join",
+    joinLimit,
+    asyncRoute((req, res) => {
+      if (req.user.role !== "student") {
+        res.status(403).json({ error: "Student access is required." });
+        return;
+      }
+      const { code } = z
+        .object({
+          code: z
+            .string()
+            .trim()
+            .transform((value) => value.toUpperCase())
+            .pipe(z.string().regex(/^[A-Z2-9]{8}$/)),
+        })
+        .parse(req.body);
+      const course = store.one(
+        "SELECT id,name FROM classes WHERE join_code=?",
+        [code],
+      );
+      if (!course) {
+        res
+          .status(404)
+          .json({
+            error: "That class code was not found. Check it with your teacher.",
+          });
+        return;
+      }
+      const existing = store.one(
+        "SELECT class_id FROM memberships WHERE class_id=? AND student_id=?",
+        [course.id, req.user.id],
+      );
+      if (!existing)
+        store.transaction(() => {
+          store.run(
+            "INSERT INTO memberships(class_id,student_id) VALUES(?,?)",
+            [course.id, req.user.id],
+          );
+          store.event(course.id, "Student", "Joined class", {}, req.user.id);
+        });
+      res
+        .status(existing ? 200 : 201)
+        .json({ id: course.id, name: course.name, alreadyJoined: !!existing });
+    }),
+  );
   app.get("/api/student/workspace", (req, res) => {
     if (req.user.role !== "student") {
       res.status(403).json({ error: "Student access is required." });
@@ -544,7 +610,7 @@ export function createApp(store: Store) {
       );
     const grades = store
       .all(
-        "SELECT s.*,q.title FROM submissions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.student_id=? AND s.status!='pending' ORDER BY s.created_at DESC",
+        "SELECT s.*,q.title,q.class_id FROM submissions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.student_id=? AND s.status!='pending' ORDER BY s.created_at DESC",
         [req.user.id],
       )
       .map((s) => ({
@@ -553,15 +619,22 @@ export function createApp(store: Store) {
         results: JSON.parse(s.results),
       }));
     const progress = store.all(
-      "SELECT p.*,g.topic FROM probes p JOIN gaps g ON g.id=p.gap_id WHERE p.student_id=? ORDER BY p.created_at DESC",
+      "SELECT p.*,g.topic,g.class_id FROM probes p JOIN gaps g ON g.id=p.gap_id WHERE p.student_id=? ORDER BY p.created_at DESC",
       [req.user.id],
     );
+    const selected =
+      typeof req.query.classId === "string" ? req.query.classId : "";
+    if (selected && !courses.some((course) => course.id === selected)) {
+      res.status(404).json({ error: "Class not found." });
+      return;
+    }
+    const inClass = (row: Row) => !selected || row.class_id === selected;
     res.json({
       courses,
-      gaps,
-      quizzes,
-      grades,
-      progress,
+      gaps: gaps.filter(inClass),
+      quizzes: quizzes.filter(inClass),
+      grades: grades.filter(inClass),
+      progress: progress.filter(inClass),
       engine: engineName(),
     });
   });
@@ -658,18 +731,16 @@ export function createApp(store: Store) {
           diagnose(store, quiz.class_id, req.user.id);
         }
       });
-      res
-        .status(201)
-        .json(
-          pending
-            ? {
-                id,
-                status: "pending",
-                message:
-                  "Submitted. Your teacher will review the uncertain grade before it is published.",
-              }
-            : { id, status: "graded", score, total, results },
-        );
+      res.status(201).json(
+        pending
+          ? {
+              id,
+              status: "pending",
+              message:
+                "Submitted. Your teacher will review the uncertain grade before it is published.",
+            }
+          : { id, status: "graded", score, total, results },
+      );
     }),
   );
   app.post(
@@ -787,13 +858,11 @@ export function createApp(store: Store) {
           .json({ error: error.issues.map((i) => i.message).join(" ") });
         return;
       }
-      res
-        .status(error.status || 500)
-        .json({
-          error: error.status
-            ? error.message
-            : "The operation failed. Please retry.",
-        });
+      res.status(error.status || 500).json({
+        error: error.status
+          ? error.message
+          : "The operation failed. Please retry.",
+      });
       if (!error.status)
         console.error(
           "API operation failed:",

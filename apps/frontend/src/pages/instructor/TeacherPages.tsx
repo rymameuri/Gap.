@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { ClassLink as Link } from "../../components/ClassLink";
 import { useTeacher } from "../../layouts/workspace";
 import { Title, Badge, Empty, ErrorBox, useNotice } from "../../components/ui";
 import { post, put, waitForJob } from "../../services/api";

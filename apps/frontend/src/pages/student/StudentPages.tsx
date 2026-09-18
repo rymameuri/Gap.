@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { ClassLink as Link } from "../../components/ClassLink";
 import { useStudent } from "../../layouts/workspace";
 import { useSession } from "../../services/session";
 import { Title, Badge, Empty, ErrorBox, useNotice } from "../../components/ui";
@@ -10,8 +11,11 @@ export function MyLearning() {
   const { data, refresh } = useStudent(),
     { user } = useSession(),
     notice = useNotice();
+  const [params] = useSearchParams();
   const [question, setQuestion] = useState(""),
-    [classId, setClassId] = useState(data.courses[0]?.id || ""),
+    [classId, setClassId] = useState(
+      params.get("classId") || data.courses[0]?.id || "",
+    ),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   return (
@@ -145,12 +149,12 @@ export function Lesson() {
     return (
       <section className="panel">
         <Empty>This teacher-approved explanation is not available.</Empty>
-        <Link to="/student/">Back to my learning</Link>
+        <Link to="/student/learning">Back to my learning</Link>
       </section>
     );
   return (
     <>
-      <Link className="backlink" to="/student/">
+      <Link className="backlink" to="/student/learning">
         ← Back to my learning
       </Link>
       <Title

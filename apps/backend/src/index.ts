@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { openStore } from "./db.js";
 import { seed } from "./seed.js";
 import { createApp } from "./app.js";
+import { engineName } from "./agents/provider.js";
 const store = await openStore();
 seed(store);
 const app = createApp(store);
@@ -18,9 +19,7 @@ const server = app.listen(port, process.env.API_HOST || "127.0.0.1", () =>
     "Gap API ready on port " +
       port +
       " · persistent SQLite · " +
-      (process.env.AI_GATEWAY_API_KEY && process.env.AI_GATEWAY_MODEL
-        ? "live AI"
-        : "local teaching engine"),
+      (engineName() === "live-ai" ? "live AI" : "local teaching engine"),
   ),
 );
 for (const signal of ["SIGINT", "SIGTERM"])
