@@ -19,6 +19,7 @@ export type Question = {
 };
 export type Quiz = {
   id: string;
+  class_id?: string;
   title: string;
   questions: Question[];
   status: string;
@@ -119,6 +120,8 @@ export type StudentData = {
   quizzes: Quiz[];
   grades: {
     id: string;
+    quiz_id: string;
+    created_at: string;
     title: string;
     score: number;
     total: number;
@@ -127,6 +130,7 @@ export type StudentData = {
   }[];
   progress: {
     id: string;
+    gap_id: string;
     topic: string;
     correct: number;
     created_at: string;

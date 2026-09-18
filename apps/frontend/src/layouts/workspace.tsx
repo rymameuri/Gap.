@@ -15,20 +15,15 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "../services/api";
 import { useSession } from "../services/session";
-import type { TeacherData, StudentData } from "../services/types";
+import type { TeacherData } from "../services/types";
 import { Brand, ErrorBox, EngineNote } from "../components/ui";
 export type TeacherContext = {
   data: TeacherData;
   refresh: () => Promise<void>;
   selectClass: (id: string) => void;
 };
-export type StudentContext = {
-  data: StudentData;
-  refresh: () => Promise<void>;
-};
 export const useTeacher = () => useOutletContext<TeacherContext>();
-export const useStudent = () => useOutletContext<StudentContext>();
-function useWorkspace<T>(path: string) {
+export function useWorkspace<T>(path: string) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState("");
   const navigate = useNavigate();
@@ -147,55 +142,6 @@ export function TeacherLayout() {
                 } satisfies TeacherContext
               }
             />
-            <EngineNote engine={data.engine} />
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
-export function StudentLayout() {
-  const { user, logout } = useSession(),
-    navigate = useNavigate();
-  const { data, error, refresh } =
-    useWorkspace<StudentData>("/student/workspace");
-  return (
-    <div className="student-shell">
-      <header className="student-header">
-        <Brand />
-        <div className="student-identity">
-          <span className="avatar">
-            {user?.name
-              .split(" ")
-              .map((n) => n[0])
-              .join("")}
-          </span>
-          {user?.name}
-          <button
-            className="btn small"
-            onClick={async () => {
-              await logout();
-              navigate("/");
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-      <nav className="student-nav" aria-label="Student navigation">
-        <NavLink end to="/student/">
-          My learning
-        </NavLink>
-        <NavLink to="/student/assessments">Assessments</NavLink>
-        <NavLink to="/student/progress">Progress</NavLink>
-      </nav>
-      <main>
-        {error && <ErrorBox message={error} />}{" "}
-        {!data ? (
-          <p>Loading your learning…</p>
-        ) : (
-          <>
-            <Outlet context={{ data, refresh } satisfies StudentContext} />
             <EngineNote engine={data.engine} />
           </>
         )}

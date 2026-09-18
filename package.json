@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit -p apps/frontend/tsconfig.json && tsc --noEmit -p apps/backend/tsconfig.json",
     "start": "node apps/backend/build/index.js",
     "test": "tsx --test apps/backend/src/workflow.test.ts",
+    "test:student": "node --import tsx --test apps/frontend/src/pages/student/course-model.test.ts",
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,html,md}\" \"docs/*.md\" README.md package.json dev-server.mjs"
   },
   "dependencies": {

@@ -9,7 +9,8 @@ import {
 } from "react-router-dom";
 import { SessionProvider, useSession } from "./services/session";
 import { NoticeProvider } from "./components/ui";
-import { TeacherLayout, StudentLayout } from "./layouts/workspace";
+import { TeacherLayout } from "./layouts/workspace";
+import { StudentLayout, CourseLayout } from "./layouts/StudentLayout";
 import { Login } from "./pages/auth/Login";
 import { Landing } from "./pages/Landing";
 import {
@@ -20,12 +21,15 @@ import {
   Materials,
   AgentActivity,
 } from "./pages/instructor/TeacherPages";
-import {
-  MyLearning,
-  Lesson,
-  StudentAssessments,
-  Progress,
-} from "./pages/student/StudentPages";
+import { MyCourses } from "./pages/student/MyCourses";
+import { CourseOverview } from "./pages/student/CourseOverview";
+import { StudyAssistant } from "./pages/student/StudyAssistant";
+import { Practice } from "./pages/student/Practice";
+import { QuizPage } from "./pages/student/QuizPage";
+import { Lesson } from "./pages/student/Lesson";
+import { Progress } from "./pages/student/Progress";
+import { StudentMaterials } from "./pages/student/Materials";
+import { LegacyStudentRoute } from "./pages/student/LegacyStudentRoute";
 import { useEffect, type ReactNode } from "react";
 function Guard({
   role,
@@ -99,10 +103,25 @@ createRoot(document.getElementById("root")!).render(
               </Guard>
             }
           >
-            <Route index element={<MyLearning />} />
-            <Route path="gaps/:id" element={<Lesson />} />
-            <Route path="assessments" element={<StudentAssessments />} />
-            <Route path="progress" element={<Progress />} />
+            <Route index element={<MyCourses />} />
+            <Route path="courses/:courseId" element={<CourseLayout />}>
+              <Route index element={<CourseOverview />} />
+              <Route path="assistant" element={<StudyAssistant />} />
+              <Route path="practice" element={<Practice />} />
+              <Route path="quizzes/:quizId" element={<QuizPage />} />
+              <Route path="lessons/:gapId" element={<Lesson />} />
+              <Route path="materials" element={<StudentMaterials />} />
+              <Route path="progress" element={<Progress />} />
+            </Route>
+            <Route path="gaps/:id" element={<LegacyStudentRoute />} />
+            <Route
+              path="assessments"
+              element={<LegacyStudentRoute page="practice" />}
+            />
+            <Route
+              path="progress"
+              element={<LegacyStudentRoute page="progress" />}
+            />
           </Route>
           <Route
             path="*"
