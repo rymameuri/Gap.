@@ -2,6 +2,22 @@
 
 Express + TypeScript with persistent SQLite, authenticated APIs, a durable generation queue, three teaching agents and an auditable review/recheck loop. See the repository README and `docs/architecture.md`.
 
+## Layout
+
+| Path                  | Responsibility                                                                  |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `src/app.ts`          | Builds the Express app: middleware, route registration, static frontend, errors |
+| `src/routes/`         | HTTP handlers per area; they read parameters and call a service                 |
+| `src/services/`       | Business rules, ownership checks and transactions                               |
+| `src/repositories/`   | Every SQL statement, returning typed rows (`src/rows.ts`)                       |
+| `src/validation.ts`   | Request body schemas                                                            |
+| `src/json-columns.ts` | Parsing of JSON-encoded columns                                                 |
+| `src/migrations/`     | Schema migrations                                                               |
+| `src/jobs.ts`         | Queue for agent generation tasks                                                |
+| `src/agents/`         | Agent logic, owned by the agents team                                           |
+
+Services parse request bodies at the same step as before the split, so ownership and state checks still answer before body validation. The backend compiles with `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+
 ## Configuration
 
 The server reads environment variables once at startup through `loadConfig` in `src/config.ts` and exits with a single `invalid configuration` log line listing every problem. Empty values count as unset. Only `src/index.ts` reads `process.env`; ESLint enforces this outside `src/agents`.

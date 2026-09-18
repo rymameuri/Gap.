@@ -65,115 +65,148 @@ export const initialTopics = [
     followAnswer: 2,
   },
 ];
+
+type SeedTopic = (typeof initialTopics)[number];
+
+const DEMO_CLASS = "physics";
+const DEMO_TEACHER = "teacher";
+const WELCOME_EXPLAINER = "welcome-explainer";
+
+const STUDENT_NAMES = [
+  "Sara Ahmed",
+  "Omar Ali",
+  "Lina Hassan",
+  "Yusuf Khalid",
+  "Noor Ibrahim",
+  "Adam Saleh",
+  "Maryam Omar",
+  "Ali Saleh",
+  "Hana Yusuf",
+  "Zaid Ahmed",
+  "Reem Khalid",
+  "Faisal Noor",
+  "Noura Ali",
+  "Ahmed Sami",
+  "Layla Adam",
+  "Hamza Omar",
+  "Salma Yusuf",
+  "Tariq Ali",
+  "Dana Hassan",
+  "Rayan Khalid",
+  "Maha Sami",
+  "Bilal Noor",
+  "Jana Ahmed",
+  "Sami Ali",
+];
+
+// The first two students have fixed ids and emails used by the demo logins.
+const DEMO_STUDENTS = STUDENT_NAMES.map((name, index) => ({
+  id: index === 0 ? "sara" : index === 1 ? "omar" : `student-${String(index)}`,
+  name,
+  email:
+    index === 0
+      ? "student@gap.demo"
+      : index === 1
+        ? "omar@gap.demo"
+        : `student${String(index)}@gap.demo`,
+}));
+
+function optionAt(options: readonly string[], index: number): string {
+  const option = options[index];
+  if (option === undefined)
+    throw new Error(`Seed answer index ${String(index)} has no option`);
+  return option;
+}
+
+function seedTopics(): [SeedTopic, SeedTopic, SeedTopic] {
+  const [force, energy, circuits] = initialTopics;
+  if (!force || !energy || !circuits)
+    throw new Error("Seed data needs the three physics topics");
+  return [force, energy, circuits];
+}
+
 /** Seeds the demo course and accounts into an empty database. No-op when any user exists. */
 export function seed(store: Store, demoPassword: string): void {
   if (store.one("SELECT id FROM users LIMIT 1")) return;
   const now = new Date().toISOString(),
     password = hashPassword(demoPassword);
+  const [force, energy, circuits] = seedTopics();
+  // Open gaps per topic: the first students of the roster, most on force and motion.
+  const gapPlan = [
+    { topic: force, students: 12, severity: 3, question: 1 },
+    { topic: energy, students: 8, severity: 2, question: 2 },
+    { topic: circuits, students: 5, severity: 2, question: 3 },
+  ];
   store.transaction(() => {
     store.run("INSERT INTO users VALUES(?,?,?,?,?)", [
-      "teacher",
+      DEMO_TEACHER,
       "Dr. Amal Hassan",
       "teacher@gap.demo",
       "teacher",
       password,
     ]);
-    const names = [
-      "Sara Ahmed",
-      "Omar Ali",
-      "Lina Hassan",
-      "Yusuf Khalid",
-      "Noor Ibrahim",
-      "Adam Saleh",
-      "Maryam Omar",
-      "Ali Saleh",
-      "Hana Yusuf",
-      "Zaid Ahmed",
-      "Reem Khalid",
-      "Faisal Noor",
-      "Noura Ali",
-      "Ahmed Sami",
-      "Layla Adam",
-      "Hamza Omar",
-      "Salma Yusuf",
-      "Tariq Ali",
-      "Dana Hassan",
-      "Rayan Khalid",
-      "Maha Sami",
-      "Bilal Noor",
-      "Jana Ahmed",
-      "Sami Ali",
-    ];
-    const ids = names.map((_, i) =>
-      i === 0 ? "sara" : i === 1 ? "omar" : "student-" + i,
-    );
-    names.forEach((name, i) =>
+    for (const student of DEMO_STUDENTS)
       store.run("INSERT INTO users VALUES(?,?,?,?,?)", [
-        ids[i],
-        name,
-        i === 0
-          ? "student@gap.demo"
-          : i === 1
-            ? "omar@gap.demo"
-            : "student" + i + "@gap.demo",
+        student.id,
+        student.name,
+        student.email,
         "student",
         password,
-      ]),
-    );
+      ]);
     store.run(
       "INSERT INTO classes(id,teacher_id,name,syllabus,material_version) VALUES(?,?,?,?,?)",
       [
-        "physics",
-        "teacher",
+        DEMO_CLASS,
+        DEMO_TEACHER,
         "Introduction to Physics",
         "Unit 1: Forces and motion - Newton's laws\nUnit 2: Energy and work - Conservation of energy\nUnit 3: Electric circuits - Series circuits",
         1,
       ],
     );
-    ids.forEach((id) =>
-      store.run("INSERT INTO memberships VALUES(?,?)", ["physics", id]),
-    );
-    initialTopics.forEach((topic, index) => {
-      const count = [12, 8, 5][index];
-      for (let i = 0; i < count; i++)
+    for (const student of DEMO_STUDENTS)
+      store.run("INSERT INTO memberships VALUES(?,?)", [
+        DEMO_CLASS,
+        student.id,
+      ]);
+    for (const { topic, students, severity, question } of gapPlan)
+      for (const student of DEMO_STUDENTS.slice(0, students))
         store.run("INSERT INTO gaps VALUES(?,?,?,?,?,?,?,?,?,?,?)", [
           randomUUID(),
-          "physics",
-          ids[i],
+          DEMO_CLASS,
+          student.id,
           topic.title,
           topic.tag,
           topic.section,
           "open",
-          index === 0 ? 3 : 2,
-          "Quiz 1 - Question " + (index + 1),
+          severity,
+          `Quiz 1 - Question ${String(question)}`,
           null,
           now,
         ]);
-    });
-    const t = initialTopics[0];
     const probe: Question = {
       id: "recheck",
-      prompt: t.followup,
-      topic: t.title,
-      tag: t.tag,
-      section: t.section,
+      prompt: force.followup,
+      topic: force.title,
+      tag: force.tag,
+      section: force.section,
       kind: "choice",
-      options: t.followOptions,
-      correctAnswer: t.followOptions[t.followAnswer],
+      options: force.followOptions,
+      correctAnswer: optionAt(force.followOptions, force.followAnswer),
       keywords: [],
       rubric: "1 point: applies the zero net force principle.",
       maxPoints: 1,
     };
-    const gap = store.one("SELECT * FROM gaps WHERE student_id=? AND topic=?", [
-      "sara",
-      t.title,
-    ])!;
+    const gap = store.one<{ id: string }>(
+      "SELECT * FROM gaps WHERE student_id=? AND topic=?",
+      ["sara", force.title],
+    );
+    if (!gap) throw new Error("Seed gap for the welcome explainer is missing");
     store.run("INSERT INTO interventions VALUES(?,?,?,?,?,?,?,?,?,?,?)", [
-      "welcome-explainer",
-      "physics",
-      t.title,
-      t.tag,
-      t.explanation,
+      WELCOME_EXPLAINER,
+      DEMO_CLASS,
+      force.title,
+      force.tag,
+      force.explanation,
       JSON.stringify(probe),
       JSON.stringify([gap.id]),
       "approved",
@@ -182,20 +215,19 @@ export function seed(store: Store, demoPassword: string): void {
       now,
     ]);
     store.run("UPDATE gaps SET status='ready',intervention_id=? WHERE id=?", [
-      "welcome-explainer",
+      WELCOME_EXPLAINER,
       gap.id,
     ]);
-    const e = initialTopics[1];
     const questions: Question[] = [
       {
         id: "q1",
-        prompt: e.question,
-        topic: e.title,
-        tag: e.tag,
-        section: e.section,
+        prompt: energy.question,
+        topic: energy.title,
+        tag: energy.tag,
+        section: energy.section,
         kind: "choice",
-        options: e.options,
-        correctAnswer: e.options[e.answer],
+        options: energy.options,
+        correctAnswer: optionAt(energy.options, energy.answer),
         keywords: [],
         rubric: "Correct energy transfer: 2 points.",
         maxPoints: 2,
@@ -203,13 +235,13 @@ export function seed(store: Store, demoPassword: string): void {
       {
         id: "q2",
         prompt: "Explain where the energy goes when a bicycle stops.",
-        topic: e.title,
-        tag: e.tag,
-        section: e.section,
+        topic: energy.title,
+        tag: energy.tag,
+        section: energy.section,
         kind: "text",
         options: [],
-        correctAnswer: e.explanation,
-        keywords: e.keywords,
+        correctAnswer: energy.explanation,
+        keywords: energy.keywords,
         rubric:
           "Energy transfers to heat in the brakes and surroundings: 2 points. Partial statement: 1 point.",
         maxPoints: 2,
@@ -217,7 +249,7 @@ export function seed(store: Store, demoPassword: string): void {
     ];
     store.run("INSERT INTO quizzes VALUES(?,?,?,?,?,?,?)", [
       "quiz-1",
-      "physics",
+      DEMO_CLASS,
       "Energy and work - Quiz 1",
       JSON.stringify(questions),
       "published",
@@ -237,14 +269,14 @@ export function seed(store: Store, demoPassword: string): void {
           questionId: "q1",
           score: 0,
           confidence: 1,
-          tag: e.tag,
+          tag: energy.tag,
           reason: "Incorrect energy transfer.",
         },
         {
           questionId: "q2",
           score: 1,
           confidence: 0.62,
-          tag: e.tag,
+          tag: energy.tag,
           reason:
             '"Lost" may refer to transfer to the surroundings. Teacher judgment is needed.',
         },
@@ -256,15 +288,15 @@ export function seed(store: Store, demoPassword: string): void {
       'Ambiguous use of "lost"; teacher review required.',
       now,
     ]);
-    store.event("physics", "Diagnostic", "Sample evidence analysed", {
-      students: 24,
-      topics: 3,
+    store.event(DEMO_CLASS, "Diagnostic", "Sample evidence analysed", {
+      students: DEMO_STUDENTS.length,
+      topics: gapPlan.length,
     });
     store.event(
-      "physics",
+      DEMO_CLASS,
       "Content",
       "Seed explanation approved",
-      { interventionId: "welcome-explainer" },
+      { interventionId: WELCOME_EXPLAINER },
       "sara",
     );
   });

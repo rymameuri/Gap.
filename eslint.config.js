@@ -41,6 +41,11 @@ export default tseslint.config(
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/explicit-module-boundary-types": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      // Destructuring with a rest element is how fields are omitted from objects.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { ignoreRestSiblings: true },
+      ],
     },
   },
   {

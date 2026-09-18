@@ -51,9 +51,15 @@ export function checkPassword(input: string, stored: string): boolean {
   const match = STORED_PASSWORD.exec(stored);
   if (match === null) return false;
   const [, salt, hash] = match;
+  if (salt === undefined || hash === undefined) return false;
   const expected = Buffer.from(hash, "hex");
   const actual = scryptSync(input, salt, SCRYPT_KEY_LENGTH);
   return timingSafeEqual(expected, actual);
+}
+
+/** Deletes the session for `token`; unknown tokens are ignored. */
+export function deleteSession(store: Store, token: string): void {
+  store.run("DELETE FROM sessions WHERE token_hash=?", [tokenHash(token)]);
 }
 
 export function setSession(

@@ -4,16 +4,65 @@ import type { Logger } from "./logger.js";
 import { draftAssessment } from "./agents/assessment.js";
 import { prepareContent } from "./agents/content.js";
 import { engineName } from "./agents/provider.js";
-import { diagnose } from "./agents/diagnostic.js";
+import {
+  parseAssessmentPayload,
+  parseContentPayload,
+  type JobResult,
+} from "./json-columns.js";
+import type { ClassRow, JobKind, JobRow } from "./rows.js";
+import { findClass } from "./repositories/classes.js";
+import { insertQuiz } from "./repositories/assessments.js";
+import {
+  findGapInClass,
+  insertIntervention,
+  openGapIdsForTag,
+} from "./repositories/learning.js";
+import {
+  insertJob,
+  markJobFailed,
+  markJobRunning,
+  markJobSucceeded,
+  nextQueuedJob,
+  requeueRunningJobs,
+} from "./repositories/activity.js";
+
+const now = (): string => new Date().toISOString();
+
+/**
+ * Runs agent generation tasks one at a time. Jobs are stored before they run,
+ * so tasks interrupted by a restart run again on the next start.
+ */
 export class AgentQueue {
   private active = false;
+
   constructor(
-    private store: Store,
-    private logger: Logger,
+    private readonly store: Store,
+    private readonly logger: Logger,
   ) {
-    store.run("UPDATE jobs SET status='queued' WHERE status='running'");
+    requeueRunningJobs(store);
     this.startDrain();
   }
+
+  /** Stores a job and starts it when the queue is idle. Returns the job id. */
+  enqueue(
+    classId: string,
+    actorId: string,
+    kind: JobKind,
+    payload: unknown,
+  ): string {
+    const id = randomUUID();
+    insertJob(this.store, {
+      id,
+      class_id: classId,
+      actor_id: actorId,
+      kind,
+      payload: JSON.stringify(payload),
+      now: now(),
+    });
+    this.startDrain();
+    return id;
+  }
+
   // drain() handles task failures itself; this catches failures of the queue
   // bookkeeping, such as a database write error, which would otherwise be an
   // unhandled rejection.
@@ -22,177 +71,128 @@ export class AgentQueue {
       this.logger.error({ err: error }, "agent queue stopped");
     });
   }
-  enqueue(
-    classId: string,
-    actorId: string,
-    kind: "assessment" | "content",
-    payload: unknown,
-  ) {
-    const id = randomUUID(),
-      now = new Date().toISOString();
-    this.store.run("INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?)", [
-      id,
-      classId,
-      actorId,
-      kind,
-      JSON.stringify(payload),
-      "queued",
-      null,
-      null,
-      now,
-      now,
-    ]);
-    this.startDrain();
-    return id;
-  }
-  private async drain() {
+
+  private async drain(): Promise<void> {
     if (this.active) return;
     this.active = true;
     try {
       for (;;) {
-        const job = this.store.one(
-          "SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1",
-        );
+        const job = nextQueuedJob(this.store);
         if (!job) break;
-        this.store.run(
-          "UPDATE jobs SET status='running',updated_at=? WHERE id=?",
-          [new Date().toISOString(), job.id],
-        );
-        try {
-          const course = this.store.one("SELECT * FROM classes WHERE id=?", [
-            job.class_id,
-          ]);
-          if (!course) throw new Error("Class is unavailable");
-          const payload = JSON.parse(job.payload);
-          let result: unknown;
-          if (job.kind === "assessment") {
-            const draft = await draftAssessment(payload.topic, course.syllabus),
-              id = randomUUID();
-            this.store.transaction(() => {
-              this.store.run("INSERT INTO quizzes VALUES(?,?,?,?,?,?,?)", [
-                id,
-                course.id,
-                draft.title,
-                JSON.stringify(draft.questions),
-                "draft",
-                engineName(),
-                new Date().toISOString(),
-              ]);
-              this.store.event(
-                course.id,
-                "Assessment",
-                "Quiz drafted",
-                {
-                  quizId: id,
-                  topic: payload.topic,
-                  questions: draft.questions.length,
-                  engine: engineName(),
-                },
-                null,
-                job.id,
-              );
-              this.store.run(
-                "UPDATE jobs SET status='succeeded',result=?,updated_at=? WHERE id=?",
-                [
-                  JSON.stringify({ quizId: id }),
-                  new Date().toISOString(),
-                  job.id,
-                ],
-              );
-            });
-            result = { quizId: id };
-          } else {
-            const gap = this.store.one(
-              "SELECT * FROM gaps WHERE id=? AND class_id=?",
-              [payload.gapId, course.id],
-            );
-            if (!gap) throw new Error("Learning gap is unavailable");
-            const targets = this.store
-              .all(
-                "SELECT id FROM gaps WHERE class_id=? AND tag=? AND status!='resolved'",
-                [course.id, gap.tag],
-              )
-              .map((g) => g.id);
-            if (!targets.length)
-              throw new Error("This gap has already been resolved");
-            const content = await prepareContent(
-                gap.topic,
-                gap.tag,
-                gap.section,
-                course.syllabus,
-              ),
-              id = randomUUID();
-            this.store.transaction(() => {
-              this.store.run(
-                "INSERT INTO interventions VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                [
-                  id,
-                  course.id,
-                  gap.topic,
-                  gap.tag,
-                  content.explanation,
-                  JSON.stringify(content.probe),
-                  JSON.stringify(targets),
-                  "draft",
-                  engineName(),
-                  new Date().toISOString(),
-                  null,
-                ],
-              );
-              this.store.event(
-                course.id,
-                "Content",
-                "Explanation prepared for teacher approval",
-                {
-                  interventionId: id,
-                  targets: targets.length,
-                  engine: engineName(),
-                },
-                null,
-                job.id,
-              );
-              this.store.run(
-                "UPDATE jobs SET status='succeeded',result=?,updated_at=? WHERE id=?",
-                [
-                  JSON.stringify({ interventionId: id }),
-                  new Date().toISOString(),
-                  job.id,
-                ],
-              );
-            });
-            result = { interventionId: id };
-          }
-          this.store.run(
-            "UPDATE jobs SET status='succeeded',result=?,updated_at=? WHERE id=?",
-            [JSON.stringify(result), new Date().toISOString(), job.id],
-          );
-          this.logger.info(
-            { jobId: job.id, kind: job.kind },
-            "agent task succeeded",
-          );
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Agent task failed";
-          this.logger.warn(
-            { jobId: job.id, kind: job.kind, err: error },
-            "agent task failed",
-          );
-          this.store.run(
-            "UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?",
-            [message, new Date().toISOString(), job.id],
-          );
-          this.store.event(
-            job.class_id,
-            job.kind === "assessment" ? "Assessment" : "Content",
-            "Task failed",
-            { message },
-            null,
-            job.id,
-          );
-        }
+        markJobRunning(this.store, job.id, now());
+        await this.runJob(job);
       }
     } finally {
       this.active = false;
     }
+  }
+
+  private async runJob(job: JobRow): Promise<void> {
+    try {
+      const course = findClass(this.store, job.class_id);
+      if (!course) throw new Error("Class is unavailable");
+      const result =
+        job.kind === "assessment"
+          ? await this.draftQuiz(job, course)
+          : await this.prepareExplanation(job, course);
+      markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
+      this.logger.info(
+        { jobId: job.id, kind: job.kind },
+        "agent task succeeded",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Agent task failed";
+      this.logger.warn(
+        { jobId: job.id, kind: job.kind, err: error },
+        "agent task failed",
+      );
+      markJobFailed(this.store, job.id, message, now());
+      this.store.event(
+        job.class_id,
+        job.kind === "assessment" ? "Assessment" : "Content",
+        "Task failed",
+        { message },
+        null,
+        job.id,
+      );
+    }
+  }
+
+  private async draftQuiz(job: JobRow, course: ClassRow): Promise<JobResult> {
+    const { topic } = parseAssessmentPayload(job.payload);
+    const draft = await draftAssessment(topic, course.syllabus);
+    const id = randomUUID();
+    const result = { quizId: id };
+    this.store.transaction(() => {
+      insertQuiz(this.store, {
+        id,
+        class_id: course.id,
+        title: draft.title,
+        questions: JSON.stringify(draft.questions),
+        status: "draft",
+        engine: engineName(),
+        created_at: now(),
+      });
+      this.store.event(
+        course.id,
+        "Assessment",
+        "Quiz drafted",
+        {
+          quizId: id,
+          topic,
+          questions: draft.questions.length,
+          engine: engineName(),
+        },
+        null,
+        job.id,
+      );
+      markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
+    });
+    return result;
+  }
+
+  private async prepareExplanation(
+    job: JobRow,
+    course: ClassRow,
+  ): Promise<JobResult> {
+    const { gapId } = parseContentPayload(job.payload);
+    const gap = findGapInClass(this.store, gapId, course.id);
+    if (!gap) throw new Error("Learning gap is unavailable");
+    const targets = openGapIdsForTag(this.store, course.id, gap.tag);
+    if (!targets.length) throw new Error("This gap has already been resolved");
+    const content = await prepareContent(
+      gap.topic,
+      gap.tag,
+      gap.section,
+      course.syllabus,
+    );
+    const id = randomUUID();
+    const result = { interventionId: id };
+    this.store.transaction(() => {
+      insertIntervention(this.store, {
+        id,
+        class_id: course.id,
+        topic: gap.topic,
+        tag: gap.tag,
+        content: content.explanation,
+        probe: JSON.stringify(content.probe),
+        targets: JSON.stringify(targets),
+        status: "draft",
+        engine: engineName(),
+        created_at: now(),
+        approved_at: null,
+      });
+      this.store.event(
+        course.id,
+        "Content",
+        "Explanation prepared for teacher approval",
+        { interventionId: id, targets: targets.length, engine: engineName() },
+        null,
+        job.id,
+      );
+      markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
+    });
+    return result;
   }
 }
