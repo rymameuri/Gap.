@@ -35,15 +35,12 @@
   },
   "apps/backend/src/db.ts": {
     "@typescript-eslint/explicit-module-boundary-types": {
-      "count": 5
+      "count": 4
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
     "@typescript-eslint/no-unnecessary-type-parameters": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-argument": {
       "count": 1
     }
   },

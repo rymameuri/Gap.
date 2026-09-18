@@ -2,7 +2,8 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { classCode, type Store, type Row } from "./db.js";
+import type { Store, Row } from "./db.js";
+import { classCode } from "./join-codes.js";
 import {
   authenticated,
   teacherOnly,
