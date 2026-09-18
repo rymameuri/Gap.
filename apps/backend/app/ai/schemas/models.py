@@ -116,3 +116,19 @@ class WorkflowResponse(BaseModel):
 
     route: RouteDecision
     result: AgentResult
+
+class CourseDocumentInput(BaseModel):
+    """Internal reference to a backend-managed course document."""
+
+    document_id: str = Field(min_length=1, max_length=200)
+    file_path: str = Field(min_length=1)
+
+
+class CourseIndexResult(BaseModel):
+    """Summary returned after replacing a course search index."""
+
+    course_id: str = Field(min_length=1, max_length=200)
+    document_ids: list[str]
+    document_count: int = Field(ge=1)
+    section_count: int = Field(ge=1)
+    chunk_count: int = Field(ge=1)
