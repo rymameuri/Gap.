@@ -53,7 +53,7 @@ The model ID in the example was checked against the live gateway catalog during 
 - `apps/backend/src/jobs.ts`: durable generation queue with restart recovery.
 - `apps/backend/src/app.ts`: validated, role-protected API endpoints.
 - `apps/backend/src/db.ts`: SQLite transactions and atomic on-disk persistence.
-- `data/schema.sql`: version-controlled relational schema.
+- `apps/backend/src/migrations/`: reversible schema migrations; `data/schema.sql` is the generated schema they produce.
 - `.runtime/gap.sqlite`: local database, excluded from Git.
 - `docs/architecture.md`: architecture and implementation boundaries.
 

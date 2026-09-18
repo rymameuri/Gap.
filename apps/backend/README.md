@@ -31,6 +31,23 @@ The model provider variables in `.env.example` are read by `src/agents` and docu
 
 When the frontend adds or changes a call, update `openapi.yaml` in the same change as the backend, then add or adjust the matching case in `src/contract.test.ts`.
 
+## Database migrations
+
+The schema changes only through the ordered migrations in `src/migrations`. Each has an `up` and a `down`, runs in one transaction, and is recorded in the `schema_migrations` table. The server applies pending migrations at startup and logs them; it refuses to start against a database that has migrations this code does not know.
+
+Databases created before migrations existed are adopted on first start: their existing tables are recorded as the baseline, and missing changes are applied. No data is rewritten.
+
+```sh
+npm run db -- status            # applied and pending migrations
+npm run db -- migrate           # apply pending migrations
+npm run db -- rollback [steps]  # revert the newest migrations, default 1
+npm run db -- schema            # regenerate data/schema.sql
+```
+
+The commands use `DATABASE_PATH`. Rolling back `0001-baseline` drops every table and its data. After `npm run build`, run the compiled CLI with `node apps/backend/build/migrate-cli.js <command>`.
+
+To change the schema, add the next numbered file in `src/migrations`, append it to `MIGRATIONS`, and run `npm run db -- schema`. Never edit or rename a released migration. `src/migrate.test.ts` checks that every migration reverses exactly.
+
 ## Errors
 
 Every API error response has the same body:
