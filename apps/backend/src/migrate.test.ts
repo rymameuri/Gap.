@@ -94,7 +94,10 @@ describe("migrate", () => {
     const before = store.all(
       "SELECT id,name,syllabus FROM classes ORDER BY id",
     );
-    assert.deepEqual(rollback(store, 1), ["0002-class-join-code"]);
+    assert.deepEqual(rollback(store, 2), [
+      "0003-backfill-join-codes",
+      "0002-class-join-code",
+    ]);
     assert.deepEqual(
       store.all("SELECT id,name,syllabus FROM classes ORDER BY id"),
       before,
@@ -162,11 +165,43 @@ describe("migrate", () => {
   });
 });
 
+describe("join code backfill", () => {
+  test("0003 fills codes missing from classes created after 0002", async () => {
+    const store = await blank();
+    migrate(store, MIGRATIONS.slice(0, 2));
+    store.run(
+      "INSERT INTO users VALUES('t1','T','t1@example.com','teacher','x')",
+    );
+    store.run(
+      "INSERT INTO classes(id,teacher_id,name,syllabus) VALUES('c1','t1','Physics','Units')",
+    );
+    assert.deepEqual(migrate(store).applied, ["0003-backfill-join-codes"]);
+    const course = store.one<{ join_code: string }>(
+      "SELECT join_code FROM classes WHERE id='c1'",
+    );
+    assert.ok(course);
+    assert.match(course.join_code, JOIN_CODE);
+  });
+
+  test("the seed gives the demo class a join code", async () => {
+    const store = await openStore(":memory:");
+    seed(store, "demo-password");
+    const codes = store.all<{ join_code: string | null }>(
+      "SELECT join_code FROM classes",
+    );
+    assert.ok(codes.length > 0);
+    for (const { join_code } of codes) assert.match(join_code ?? "", JOIN_CODE);
+  });
+});
+
 describe("legacy databases", () => {
   test("adopts a database that already has join codes without touching data", async () => {
     const store = await legacyStore(true);
     const result = migrate(store);
-    assert.deepEqual(result, { adopted: IDS, applied: [] });
+    assert.deepEqual(result, {
+      adopted: ["0001-baseline", "0002-class-join-code"],
+      applied: ["0003-backfill-join-codes"],
+    });
     const course = store.one<{ name: string; join_code: string }>(
       "SELECT name,join_code FROM classes WHERE id='c1'",
     );
@@ -181,7 +216,7 @@ describe("legacy databases", () => {
     const result = migrate(store);
     assert.deepEqual(result, {
       adopted: ["0001-baseline"],
-      applied: ["0002-class-join-code"],
+      applied: ["0002-class-join-code", "0003-backfill-join-codes"],
     });
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",
