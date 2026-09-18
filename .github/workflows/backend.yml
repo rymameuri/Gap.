@@ -8,7 +8,6 @@ on:
       - ".github/**"
       - ".githooks/**"
       - "eslint.config.js"
-      - "eslint-suppressions.json"
       - "package.json"
       - "package-lock.json"
   push:
@@ -19,7 +18,6 @@ on:
       - ".github/**"
       - ".githooks/**"
       - "eslint.config.js"
-      - "eslint-suppressions.json"
       - "package.json"
       - "package-lock.json"
 

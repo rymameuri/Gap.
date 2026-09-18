@@ -48,6 +48,8 @@ export class Store {
     }
   }
 
+  // T declares the columns of the SELECT, like the type argument of all().
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- see above
   one<T extends object = Row>(
     sql: string,
     params: SqlValue[] = [],

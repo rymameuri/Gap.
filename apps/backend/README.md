@@ -109,15 +109,9 @@ npm run check:backend
 
 `src/agents/` is owned by the agents team and is excluded from lint and the forbidden-character scan.
 
-### Lint baseline
+### Lint exceptions
 
-`eslint-suppressions.json` records lint violations that predate the lint setup. New violations fail. When a change removes a recorded violation, ESLint fails until the file is pruned:
-
-```sh
-npx eslint apps/backend --prune-suppressions
-```
-
-Never add entries to the file by hand or with `--suppress-all`.
+There is no suppression baseline. A rule may be relaxed only with an inline `eslint-disable-next-line <rule> -- <reason>` next to the code it covers. The two current exceptions are in `src/db.ts`: the untyped default `Row` that `src/agents` relies on, and the row type parameter of `Store.one`.
 
 ### Git hooks
 

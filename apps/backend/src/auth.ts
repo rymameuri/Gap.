@@ -10,19 +10,20 @@ import type { Logger } from "./logger.js";
 import { SESSION_COOKIE, SESSION_TTL_MS } from "./constants.js";
 import { ForbiddenError, UnauthenticatedError } from "./errors.js";
 
-export type AuthUser = {
+export interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: "teacher" | "student";
-};
-declare global {
-  namespace Express {
-    interface Request {
-      user: AuthUser;
-      id: string;
-      log: Logger;
-    }
+}
+
+// Set by requestContext (id, log) and authenticated (user) before route
+// handlers run; routes outside the session guard must not read `user`.
+declare module "express-serve-static-core" {
+  interface Request {
+    user: AuthUser;
+    id: string;
+    log: Logger;
   }
 }
 
