@@ -1,15 +1,6 @@
 {
   "apps/backend/src/app.ts": {
     "@typescript-eslint/explicit-module-boundary-types": {
-      "count": 2
-    },
-    "@typescript-eslint/no-confusing-void-expression": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-misused-promises": {
       "count": 1
     },
     "@typescript-eslint/no-non-null-assertion": {
@@ -19,38 +10,26 @@
       "count": 2
     },
     "@typescript-eslint/no-unsafe-argument": {
-      "count": 72
+      "count": 71
     },
     "@typescript-eslint/no-unsafe-assignment": {
-      "count": 33
+      "count": 32
     },
     "@typescript-eslint/no-unsafe-call": {
       "count": 1
     },
     "@typescript-eslint/no-unsafe-member-access": {
-      "count": 6
+      "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
-      "count": 3
-    },
-    "@typescript-eslint/restrict-plus-operands": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/backend/src/auth.ts": {
     "@typescript-eslint/consistent-type-definitions": {
       "count": 1
     },
-    "@typescript-eslint/explicit-module-boundary-types": {
-      "count": 4
-    },
     "@typescript-eslint/no-namespace": {
-      "count": 1
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
       "count": 1
     }
   },
@@ -65,20 +44,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unsafe-argument": {
-      "count": 1
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
-      "count": 1
-    }
-  },
-  "apps/backend/src/index.ts": {
-    "@typescript-eslint/no-confusing-void-expression": {
-      "count": 2
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
-      "count": 2
-    },
-    "@typescript-eslint/restrict-plus-operands": {
       "count": 1
     }
   },
@@ -103,9 +68,6 @@
     }
   },
   "apps/backend/src/seed.ts": {
-    "@typescript-eslint/explicit-module-boundary-types": {
-      "count": 1
-    },
     "@typescript-eslint/no-confusing-void-expression": {
       "count": 2
     },
@@ -113,9 +75,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unsafe-argument": {
-      "count": 1
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
       "count": 1
     },
     "@typescript-eslint/restrict-plus-operands": {
@@ -154,7 +113,7 @@
       "count": 2
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "count": 3
+      "count": 1
     },
     "@typescript-eslint/restrict-plus-operands": {
       "count": 12

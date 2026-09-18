@@ -65,12 +65,11 @@ export const initialTopics = [
     followAnswer: 2,
   },
 ];
-export function seed(store: Store) {
+/** Seeds the demo course and accounts into an empty database. No-op when any user exists. */
+export function seed(store: Store, demoPassword: string): void {
   if (store.one("SELECT id FROM users LIMIT 1")) return;
-  if (process.env.NODE_ENV === "production" && !process.env.DEMO_PASSWORD)
-    throw new Error("Set DEMO_PASSWORD before seeding a production database.");
   const now = new Date().toISOString(),
-    password = hashPassword(process.env.DEMO_PASSWORD || "GapDemo!2026");
+    password = hashPassword(demoPassword);
   store.transaction(() => {
     store.run("INSERT INTO users VALUES(?,?,?,?,?)", [
       "teacher",

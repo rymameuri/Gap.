@@ -1,65 +1,76 @@
-import express, { type RequestHandler } from "express";
-import rateLimit from "express-rate-limit";
+import express from "express";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { z } from "zod";
 import { classCode, type Store, type Row } from "./db.js";
 import {
   authenticated,
   teacherOnly,
+  studentOnly,
   checkPassword,
   setSession,
   sessionToken,
   tokenHash,
 } from "./auth.js";
 import { AgentQueue } from "./jobs.js";
+import type { Config } from "./config.js";
+import type { Logger } from "./logger.js";
+import {
+  JOIN_ATTEMPTS_PER_WINDOW,
+  JSON_BODY_LIMIT,
+  LOGIN_ATTEMPTS_PER_WINDOW,
+  REVIEW_CONFIDENCE_THRESHOLD,
+  SESSION_COOKIE,
+} from "./constants.js";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+  UnauthenticatedError,
+} from "./errors.js";
+import {
+  asyncRoute,
+  attemptLimit,
+  errorHandler,
+  noStore,
+  notFound,
+  originGuard,
+  requestContext,
+} from "./http/middleware.js";
 import { quizSchema, type Question, type Grade } from "./agents/schemas.js";
 import { gradeAssessment } from "./agents/assessment.js";
 import { diagnose, recordLearningGaps } from "./agents/diagnostic.js";
 import { engineName } from "./agents/provider.js";
-const asyncRoute =
-  (fn: RequestHandler): RequestHandler =>
-  (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
 export const publicQuestion = (q: Question) => {
   const { correctAnswer, keywords, ...rest } = q;
   return rest;
 };
 const date = () => new Date().toISOString();
-export function createApp(store: Store) {
+export interface AppDependencies {
+  readonly store: Store;
+  readonly config: Config;
+  readonly logger: Logger;
+  /** Directory holding the built frontend; served with an index.html fallback when set. */
+  readonly webRoot?: string;
+}
+export function createApp({
+  store,
+  config,
+  logger,
+  webRoot,
+}: AppDependencies): express.Express {
   const app = express();
   app.disable("x-powered-by");
-  const queue = new AgentQueue(store);
-  app.use(express.json({ limit: "250kb" }));
-  app.use("/api", (req, res, next) => {
-    res.setHeader("Cache-Control", "no-store");
-    if (!["GET", "HEAD"].includes(req.method) && req.headers.origin) {
-      const origins = [
-        req.protocol + "://" + req.get("host"),
-        process.env.APP_ORIGIN,
-        "http://localhost:" + (process.env.WEB_PORT || 3000),
-        "http://127.0.0.1:" + (process.env.WEB_PORT || 3000),
-      ];
-      if (!origins.includes(req.headers.origin)) {
-        res
-          .status(403)
-          .json({ error: "This request origin is not permitted." });
-        return;
-      }
-    }
-    next();
-  });
+  const queue = new AgentQueue(store, logger);
+  app.use(requestContext(logger));
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  app.use("/api", noStore, originGuard(config.allowedOrigins));
   app.get("/api/health", (_req, res) =>
     res.json({ ok: true, engine: engineName(), database: "sqlite" }),
   );
   app.post(
     "/api/auth/login",
-    rateLimit({
-      windowMs: 60000,
-      limit: 20,
-      standardHeaders: true,
-      legacyHeaders: false,
-    }),
+    attemptLimit(LOGIN_ATTEMPTS_PER_WINDOW),
     asyncRoute((req, res) => {
       const body = z
         .object({
@@ -70,11 +81,12 @@ export function createApp(store: Store) {
       const user = store.one("SELECT * FROM users WHERE email=?", [
         body.email.trim().toLowerCase(),
       ]);
-      if (!user || !checkPassword(body.password, user.password)) {
-        res.status(401).json({ error: "Email or password is incorrect." });
-        return;
-      }
-      setSession(store, res, user.id);
+      if (!user || !checkPassword(body.password, user.password))
+        throw new UnauthenticatedError(
+          "Email or password is incorrect.",
+          "invalid_credentials",
+        );
+      setSession(store, res, user.id, config.secureCookies);
       res.json({
         id: user.id,
         name: user.name,
@@ -89,7 +101,7 @@ export function createApp(store: Store) {
     store.run("DELETE FROM sessions WHERE token_hash=?", [
       tokenHash(sessionToken(req.headers.cookie)),
     ]);
-    res.clearCookie("gap_session", { path: "/" });
+    res.clearCookie(SESSION_COOKIE, { path: "/" });
     res.json({ ok: true });
   });
   const ownClass = (teacherId: string, classId: string) => {
@@ -97,8 +109,7 @@ export function createApp(store: Store) {
       "SELECT * FROM classes WHERE id=? AND teacher_id=?",
       [classId, teacherId],
     );
-    if (!course)
-      throw Object.assign(new Error("Class not found."), { status: 404 });
+    if (!course) throw new NotFoundError("Class not found.");
     return course;
   };
   const quizWithQuestions = (row: Row, publicOnly = false) => ({
@@ -251,12 +262,10 @@ export function createApp(store: Store) {
         "SELECT id FROM users WHERE email=? AND role='student'",
         [email.toLowerCase()],
       );
-      if (!user) {
-        res.status(404).json({
-          error: "Student account not found. Use a seeded demo account.",
-        });
-        return;
-      }
+      if (!user)
+        throw new NotFoundError(
+          "Student account not found. Use a seeded demo account.",
+        );
       store.run("INSERT OR IGNORE INTO memberships VALUES(?,?)", [
         req.params.id,
         user.id,
@@ -282,10 +291,7 @@ export function createApp(store: Store) {
       req.params.id,
       req.user.id,
     ]);
-    if (!job) {
-      res.status(404).json({ error: "Task not found." });
-      return;
-    }
+    if (!job) throw new NotFoundError("Task not found.");
     res.json({
       ...job,
       payload: undefined,
@@ -299,15 +305,10 @@ export function createApp(store: Store) {
       const quiz = store.one("SELECT * FROM quizzes WHERE id=?", [
         req.params.id,
       ]);
-      if (!quiz) {
-        res.status(404).json({ error: "Quiz not found." });
-        return;
-      }
+      if (!quiz) throw new NotFoundError("Quiz not found.");
       ownClass(req.user.id, quiz.class_id);
-      if (quiz.status !== "draft") {
-        res.status(409).json({ error: "Published quizzes cannot be edited." });
-        return;
-      }
+      if (quiz.status !== "draft")
+        throw new ConflictError("Published quizzes cannot be edited.");
       const body = quizSchema.parse(req.body);
       store.run("UPDATE quizzes SET title=?,questions=? WHERE id=?", [
         body.title,
@@ -324,10 +325,7 @@ export function createApp(store: Store) {
       const quiz = store.one("SELECT * FROM quizzes WHERE id=?", [
         req.params.id,
       ]);
-      if (!quiz) {
-        res.status(404).json({ error: "Quiz not found." });
-        return;
-      }
+      if (!quiz) throw new NotFoundError("Quiz not found.");
       ownClass(req.user.id, quiz.class_id);
       quizSchema.parse({
         title: quiz.title,
@@ -352,17 +350,10 @@ export function createApp(store: Store) {
         "SELECT s.*,q.class_id,q.questions FROM submissions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=?",
         [req.params.id],
       );
-      if (!sub) {
-        res.status(404).json({ error: "Submission not found." });
-        return;
-      }
+      if (!sub) throw new NotFoundError("Submission not found.");
       ownClass(req.user.id, sub.class_id);
-      if (sub.status !== "pending") {
-        res
-          .status(409)
-          .json({ error: "This submission has already been published." });
-        return;
-      }
+      if (sub.status !== "pending")
+        throw new ConflictError("This submission has already been published.");
       const { scores, feedback } = z
         .object({
           scores: z.record(z.number().min(0)),
@@ -373,12 +364,8 @@ export function createApp(store: Store) {
         results: Grade[] = JSON.parse(sub.results);
       for (const q of questions) {
         const score = scores[q.id];
-        if (score === undefined || score > q.maxPoints) {
-          res
-            .status(400)
-            .json({ error: "Provide a valid score for each question." });
-          return;
-        }
+        if (score === undefined || score > q.maxPoints)
+          throw new BadRequestError("Provide a valid score for each question.");
         const result = results.find((r) => r.questionId === q.id)!;
         result.score = score;
         result.tag = score < q.maxPoints ? q.tag : null;
@@ -420,10 +407,7 @@ export function createApp(store: Store) {
     teacherOnly,
     asyncRoute((req, res) => {
       const gap = store.one("SELECT * FROM gaps WHERE id=?", [req.params.id]);
-      if (!gap) {
-        res.status(404).json({ error: "Gap not found." });
-        return;
-      }
+      if (!gap) throw new NotFoundError("Gap not found.");
       ownClass(req.user.id, gap.class_id);
       res.status(202).json({
         jobId: queue.enqueue(gap.class_id, req.user.id, "content", {
@@ -439,17 +423,10 @@ export function createApp(store: Store) {
       const item = store.one("SELECT * FROM interventions WHERE id=?", [
         req.params.id,
       ]);
-      if (!item) {
-        res.status(404).json({ error: "Explanation not found." });
-        return;
-      }
+      if (!item) throw new NotFoundError("Explanation not found.");
       ownClass(req.user.id, item.class_id);
-      if (item.status !== "draft") {
-        res
-          .status(409)
-          .json({ error: "Shared explanations cannot be edited." });
-        return;
-      }
+      if (item.status !== "draft")
+        throw new ConflictError("Shared explanations cannot be edited.");
       const body = z
         .object({ content: z.string().min(30).max(8000) })
         .parse(req.body);
@@ -467,15 +444,10 @@ export function createApp(store: Store) {
       const item = store.one("SELECT * FROM interventions WHERE id=?", [
         req.params.id,
       ]);
-      if (!item) {
-        res.status(404).json({ error: "Explanation not found." });
-        return;
-      }
+      if (!item) throw new NotFoundError("Explanation not found.");
       ownClass(req.user.id, item.class_id);
-      if (item.status !== "draft") {
-        res.status(409).json({ error: "This explanation is already shared." });
-        return;
-      }
+      if (item.status !== "draft")
+        throw new ConflictError("This explanation is already shared.");
       store.transaction(() => {
         store.run(
           "UPDATE interventions SET status='approved',approved_at=? WHERE id=?",
@@ -521,20 +493,11 @@ export function createApp(store: Store) {
         }
     res.json({ courses });
   });
-  const joinLimit = rateLimit({
-    windowMs: 60000,
-    limit: 15,
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
   app.post(
     "/api/student/classes/join",
-    joinLimit,
+    attemptLimit(JOIN_ATTEMPTS_PER_WINDOW),
+    studentOnly,
     asyncRoute((req, res) => {
-      if (req.user.role !== "student") {
-        res.status(403).json({ error: "Student access is required." });
-        return;
-      }
       const { code } = z
         .object({
           code: z
@@ -548,12 +511,10 @@ export function createApp(store: Store) {
         "SELECT id,name FROM classes WHERE join_code=?",
         [code],
       );
-      if (!course) {
-        res.status(404).json({
-          error: "That class code was not found. Check it with your teacher.",
-        });
-        return;
-      }
+      if (!course)
+        throw new NotFoundError(
+          "That class code was not found. Check it with your teacher.",
+        );
       const existing = store.one(
         "SELECT class_id FROM memberships WHERE class_id=? AND student_id=?",
         [course.id, req.user.id],
@@ -571,11 +532,7 @@ export function createApp(store: Store) {
         .json({ id: course.id, name: course.name, alreadyJoined: !!existing });
     }),
   );
-  app.get("/api/student/workspace", (req, res) => {
-    if (req.user.role !== "student") {
-      res.status(403).json({ error: "Student access is required." });
-      return;
-    }
+  app.get("/api/student/workspace", studentOnly, (req, res) => {
     const courses = store.all(
       "SELECT c.* FROM memberships m JOIN classes c ON c.id=m.class_id WHERE m.student_id=?",
       [req.user.id],
@@ -622,10 +579,8 @@ export function createApp(store: Store) {
     );
     const selected =
       typeof req.query.classId === "string" ? req.query.classId : "";
-    if (selected && !courses.some((course) => course.id === selected)) {
-      res.status(404).json({ error: "Class not found." });
-      return;
-    }
+    if (selected && !courses.some((course) => course.id === selected))
+      throw new NotFoundError("Class not found.");
     const inClass = (row: Row) => !selected || row.class_id === selected;
     res.json({
       courses,
@@ -638,30 +593,20 @@ export function createApp(store: Store) {
   });
   app.post(
     "/api/student/quizzes/:id/submit",
+    studentOnly,
     asyncRoute(async (req, res) => {
-      if (req.user.role !== "student") {
-        res.status(403).json({ error: "Student access is required." });
-        return;
-      }
       const quiz = store.one(
         "SELECT q.* FROM quizzes q JOIN memberships m ON m.class_id=q.class_id WHERE q.id=? AND q.status='published' AND m.student_id=?",
         [req.params.id, req.user.id],
       );
-      if (!quiz) {
-        res.status(404).json({ error: "Assessment not found." });
-        return;
-      }
+      if (!quiz) throw new NotFoundError("Assessment not found.");
       if (
         store.one(
           "SELECT id FROM submissions WHERE quiz_id=? AND student_id=?",
           [quiz.id, req.user.id],
         )
-      ) {
-        res
-          .status(409)
-          .json({ error: "You have already submitted this assessment." });
-        return;
-      }
+      )
+        throw new ConflictError("You have already submitted this assessment.");
       const { answers } = z
           .object({ answers: z.record(z.string().max(4000)) })
           .parse(req.body),
@@ -670,15 +615,13 @@ export function createApp(store: Store) {
         if (
           !answers[q.id]?.trim() ||
           (q.kind === "choice" && !q.options.includes(answers[q.id]))
-        ) {
-          res
-            .status(400)
-            .json({ error: "Answer every question using a valid option." });
-          return;
-        }
+        )
+          throw new BadRequestError(
+            "Answer every question using a valid option.",
+          );
       const results = await gradeAssessment(questions, answers),
         confidence = Math.min(...results.map((r) => r.confidence)),
-        pending = confidence < 0.8,
+        pending = confidence < REVIEW_CONFIDENCE_THRESHOLD,
         score = results.reduce((n, r) => n + r.score, 0),
         total = questions.reduce((n, q) => n + q.maxPoints, 0),
         id = randomUUID();
@@ -688,12 +631,8 @@ export function createApp(store: Store) {
           "SELECT id FROM submissions WHERE quiz_id=? AND student_id=?",
           [quiz.id, req.user.id],
         )
-      ) {
-        res
-          .status(409)
-          .json({ error: "You have already submitted this assessment." });
-        return;
-      }
+      )
+        throw new ConflictError("You have already submitted this assessment.");
       store.transaction(() => {
         store.run("INSERT INTO submissions VALUES(?,?,?,?,?,?,?,?,?,?,?)", [
           id,
@@ -743,29 +682,20 @@ export function createApp(store: Store) {
   );
   app.post(
     "/api/student/gaps/:id/recheck",
+    studentOnly,
     asyncRoute((req, res) => {
-      if (req.user.role !== "student") {
-        res.status(403).json({ error: "Student access is required." });
-        return;
-      }
       const gap = store.one(
         "SELECT g.*,i.probe,i.content FROM gaps g JOIN interventions i ON i.id=g.intervention_id AND i.status='approved' WHERE g.id=? AND g.student_id=?",
         [req.params.id, req.user.id],
       );
-      if (!gap) {
-        res
-          .status(404)
-          .json({ error: "Teacher-approved explanation not found." });
-        return;
-      }
+      if (!gap)
+        throw new NotFoundError("Teacher-approved explanation not found.");
       const { answer } = z
           .object({ answer: z.string().max(2000) })
           .parse(req.body),
         probe: Question = JSON.parse(gap.probe);
-      if (!probe.options.includes(answer)) {
-        res.status(400).json({ error: "Select one of the answer options." });
-        return;
-      }
+      if (!probe.options.includes(answer))
+        throw new BadRequestError("Select one of the answer options.");
       const correct = answer === probe.correctAnswer;
       store.transaction(() => {
         store.run("INSERT INTO probes VALUES(?,?,?,?,?,?)", [
@@ -803,11 +733,8 @@ export function createApp(store: Store) {
   );
   app.post(
     "/api/student/questions",
+    studentOnly,
     asyncRoute((req, res) => {
-      if (req.user.role !== "student") {
-        res.status(403).json({ error: "Student access is required." });
-        return;
-      }
       const body = z
         .object({ classId: z.string(), text: z.string().min(5).max(2000) })
         .parse(req.body);
@@ -816,10 +743,8 @@ export function createApp(store: Store) {
           "SELECT 1 FROM memberships WHERE class_id=? AND student_id=?",
           [body.classId, req.user.id],
         )
-      ) {
-        res.status(404).json({ error: "Class not found." });
-        return;
-      }
+      )
+        throw new NotFoundError("Class not found.");
       store.transaction(() => {
         store.run("INSERT INTO questions VALUES(?,?,?,?,?)", [
           randomUUID(),
@@ -840,33 +765,14 @@ export function createApp(store: Store) {
       res.status(201).json({ ok: true });
     }),
   );
-  app.use("/api", (_req, res) =>
-    res.status(404).json({ error: "Endpoint not found." }),
-  );
-  app.use(
-    (
-      error: any,
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction,
-    ) => {
-      if (error instanceof z.ZodError) {
-        res
-          .status(400)
-          .json({ error: error.issues.map((i) => i.message).join(" ") });
-        return;
-      }
-      res.status(error.status || 500).json({
-        error: error.status
-          ? error.message
-          : "The operation failed. Please retry.",
-      });
-      if (!error.status)
-        console.error(
-          "API operation failed:",
-          error instanceof Error ? error.message : "unknown error",
-        );
-    },
-  );
+  app.use("/api", notFound);
+  if (webRoot !== undefined) {
+    const indexFile = resolve(webRoot, "index.html");
+    app.use(express.static(webRoot));
+    app.get("*", (_req, res) => {
+      res.sendFile(indexFile);
+    });
+  }
+  app.use(errorHandler);
   return app;
 }

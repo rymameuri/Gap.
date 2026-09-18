@@ -1,31 +1,65 @@
 import "dotenv/config";
-import express from "express";
-import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { openStore } from "./db.js";
 import { seed } from "./seed.js";
 import { createApp } from "./app.js";
+import { ConfigError, loadConfig, type Config } from "./config.js";
+import { createLogger } from "./logger.js";
 import { engineName } from "./agents/provider.js";
-const store = await openStore();
-seed(store);
-const app = createApp(store);
-if (existsSync(resolve("dist/index.html"))) {
-  app.use(express.static(resolve("dist")));
-  app.get("*", (_req, res) => res.sendFile(resolve("dist/index.html")));
+
+const WEB_ROOT = resolve("dist");
+const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
+
+function configOrExit(): Config {
+  try {
+    return loadConfig(process.env);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    createLogger("info").fatal(
+      { issues: error.issues },
+      "invalid configuration",
+    );
+    process.exit(1);
+  }
 }
-const port = Number(process.env.API_PORT || 3001);
-const server = app.listen(port, process.env.API_HOST || "127.0.0.1", () =>
-  console.log(
-    "Gap API ready on port " +
-      port +
-      ", persistent SQLite, " +
-      (engineName() === "live-ai" ? "live AI" : "local teaching engine"),
-  ),
-);
-for (const signal of ["SIGINT", "SIGTERM"])
-  process.on(signal, () =>
+
+const config = configOrExit();
+const logger = createLogger(config.logLevel);
+
+process.on("unhandledRejection", (reason) => {
+  logger.fatal({ err: reason }, "unhandled promise rejection");
+  process.exit(1);
+});
+process.on("uncaughtException", (error) => {
+  logger.fatal({ err: error }, "uncaught exception");
+  process.exit(1);
+});
+
+const store = await openStore(config.databasePath);
+seed(store, config.demoPassword);
+const app = createApp({
+  store,
+  config,
+  logger,
+  ...(existsSync(resolve(WEB_ROOT, "index.html")) ? { webRoot: WEB_ROOT } : {}),
+});
+const server = app.listen(config.port, config.host, () => {
+  logger.info(
+    {
+      host: config.host,
+      port: config.port,
+      environment: config.environment,
+      engine: engineName(),
+    },
+    "API ready",
+  );
+});
+for (const signal of SHUTDOWN_SIGNALS)
+  process.on(signal, () => {
+    logger.info({ signal }, "shutting down");
     server.close(() => {
       store.save();
       process.exit(0);
-    }),
-  );
+    });
+  });
