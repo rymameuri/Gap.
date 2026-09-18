@@ -22,6 +22,7 @@ describe("loadConfig", () => {
       demoPassword: "GapDemo!2026",
       logLevel: "info",
       secureCookies: false,
+      trustProxyHops: 0,
       allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
     });
   });
@@ -87,6 +88,12 @@ describe("loadConfig", () => {
     assert.deepEqual(issuesOf({ APP_ORIGIN: "nope" }), [
       "APP_ORIGIN must be an origin such as https://app.example.com",
     ]);
+  });
+
+  test("reads TRUST_PROXY as a small hop count", () => {
+    assert.equal(loadConfig({ TRUST_PROXY: "2" }).trustProxyHops, 2);
+    for (const value of ["-1", "11", "1.5", "yes"])
+      assert.equal(issuesOf({ TRUST_PROXY: value }).length, 1, value);
   });
 
   test("rejects non-integer ports", () => {

@@ -10,6 +10,7 @@ import {
   noStore,
   notFound,
   originGuard,
+  proxyHeaderWarning,
   requestContext,
 } from "./http/middleware.js";
 import { registerClassRoutes } from "./routes/classes.js";
@@ -34,6 +35,10 @@ export function createApp({
 }: AppDependencies): express.Express {
   const app = express();
   app.disable("x-powered-by");
+  // Behind a proxy, req.ip and req.protocol must come from X-Forwarded-* so
+  // rate limits apply per client and the origin check sees https.
+  if (config.trustProxyHops > 0) app.set("trust proxy", config.trustProxyHops);
+  else app.use(proxyHeaderWarning(logger));
   const context = { store, config, queue: new AgentQueue(store, logger) };
   app.use(requestContext(logger));
   app.use(express.json({ limit: JSON_BODY_LIMIT }));

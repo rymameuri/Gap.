@@ -25,11 +25,14 @@ export interface Config {
   readonly demoPassword: string;
   readonly logLevel: LogLevel;
   readonly secureCookies: boolean;
+  /** Reverse proxies in front of the app whose X-Forwarded-* headers are trusted. */
+  readonly trustProxyHops: number;
   /** Origins allowed to send state-changing requests, besides the API's own host. */
   readonly allowedOrigins: readonly string[];
 }
 
 const port = z.coerce.number().int().min(1).max(65535);
+const MAX_PROXY_HOPS = 10;
 
 const origin = z
   .string()
@@ -49,6 +52,7 @@ const envSchema = z
     DATABASE_PATH: z.string().min(1).default(".runtime/gap.sqlite"),
     DEMO_PASSWORD: z.string().min(8).max(128).optional(),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
+    TRUST_PROXY: z.coerce.number().int().min(0).max(MAX_PROXY_HOPS).default(0),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production" && env.DEMO_PASSWORD === undefined)
@@ -106,6 +110,7 @@ export function loadConfig(
     demoPassword: values.DEMO_PASSWORD ?? DEFAULT_DEMO_PASSWORD,
     logLevel: values.LOG_LEVEL,
     secureCookies: values.NODE_ENV === "production",
+    trustProxyHops: values.TRUST_PROXY,
     allowedOrigins:
       values.APP_ORIGIN === undefined
         ? webOrigins

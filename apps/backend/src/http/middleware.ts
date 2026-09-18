@@ -67,6 +67,23 @@ export function requestContext(logger: Logger): RequestHandler {
   };
 }
 
+/**
+ * Logs one warning when a proxy header arrives while TRUST_PROXY is 0, since
+ * rate limits and the origin check would then see the proxy, not the client.
+ */
+export function proxyHeaderWarning(logger: Logger): RequestHandler {
+  let warned = false;
+  return (req, _res, next) => {
+    if (!warned && req.get("X-Forwarded-For") !== undefined) {
+      warned = true;
+      logger.warn(
+        "X-Forwarded-For received but TRUST_PROXY is 0; set TRUST_PROXY to the number of proxies in front of the app",
+      );
+    }
+    next();
+  };
+}
+
 export const noStore: RequestHandler = (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
@@ -103,6 +120,8 @@ export function attemptLimit(attemptsPerWindow: number): RequestHandler {
     limit: attemptsPerWindow,
     standardHeaders: true,
     legacyHeaders: false,
+    // proxyHeaderWarning reports a missing TRUST_PROXY through the app logger.
+    validate: { xForwardedForHeader: false },
     handler: (_req, _res, next) => {
       next(
         new RateLimitedError(

@@ -17,6 +17,8 @@ export interface TestResponse {
 
 export interface TestServer {
   readonly app: Express;
+  /** Origin the test server listens on, for example http://127.0.0.1:54321. */
+  readonly baseUrl: string;
   readonly config: Config;
   readonly store: Store;
   /** Parsed JSON log records written by the app logger. */
@@ -88,6 +90,7 @@ export async function startTestServer(
 
   return {
     app,
+    baseUrl,
     config,
     store,
     logs,
