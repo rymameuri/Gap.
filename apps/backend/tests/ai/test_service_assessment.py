@@ -132,10 +132,12 @@ def test_service_routes_generates_and_grades_quiz() -> None:
     assert "answer_key" not in public_quiz
 
     grade = service.grade_quiz_submission(
-        QuizSubmission(
+        course_id="physics-101",
+        student_id="student-1",
+        submission=QuizSubmission(
             quiz_id=quiz_id,
             answers={"q1": 0},
-        )
+        ),
     )
 
     assert grade.correct_count == 1

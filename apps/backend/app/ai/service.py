@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 from app.ai.agents.assessment_agent import AssessmentAgent
+from app.ai.agents.diagnostic_agent import DiagnosticAgent
 from app.ai.agents.study_agent import (
     AsyncCompletionClient,
     StudyAgent,
@@ -16,6 +17,7 @@ from app.ai.schemas.models import (
     AgentName,
     AgentRequest,
     AgentResult,
+    CourseDiagnosticReport,
     CourseDocumentInput,
     CourseIndexResult,
     QuizDifficulty,
@@ -33,11 +35,12 @@ class AIService:
     - The course-scoped retriever
     - The Study Agent
     - The Assessment Agent
+    - The Diagnostic Agent
     - The orchestration workflow
 
     Create one AIService instance for the application. Creating a new
-    instance for each request would create a new empty in-memory index
-    and remove access to previously generated quiz answer keys.
+    instance for each request would create an empty in-memory index and
+    remove access to previously generated quiz answer keys.
     """
 
     def __init__(
@@ -106,11 +109,16 @@ class AIService:
             default_difficulty=default_quiz_difficulty,
         )
 
+        self._diagnostic_agent = DiagnosticAgent()
+
         self._workflow = AgentWorkflow(
             agents={
                 AgentName.STUDY: self._study_agent,
                 AgentName.ASSESSMENT: (
                     self._assessment_agent
+                ),
+                AgentName.DIAGNOSTIC: (
+                    self._diagnostic_agent
                 ),
             },
             router=router,
@@ -218,7 +226,7 @@ class AIService:
         question_count: int = 5,
         difficulty: QuizDifficulty = QuizDifficulty.MEDIUM,
     ) -> AgentResult:
-        """Generate a grounded multiple-choice quiz directly."""
+        """Generate a grounded multiple-choice quiz."""
 
         return await self._assessment_agent.generate_quiz(
             course_id=course_id,
@@ -229,20 +237,47 @@ class AIService:
 
     def grade_quiz_submission(
         self,
+        *,
+        course_id: str,
+        student_id: str,
         submission: QuizSubmission,
+        is_follow_up: bool = False,
+        targeted_tags: Sequence[str] = (),
     ) -> QuizGradeResult:
         """
-        Grade a stored MCQ quiz deterministically.
+        Grade an MCQ submission and update diagnostics.
 
-        This operation does not call the LLM.
+        course_id and student_id must come from trusted backend
+        authentication and enrolment data, not directly from
+        unverified frontend values.
         """
 
-        return self._assessment_agent.grade_submission(
+        grade = self._assessment_agent.grade_submission(
             submission
         )
 
+        self._diagnostic_agent.record_quiz_grade(
+            course_id=course_id,
+            student_id=student_id,
+            grade=grade,
+            is_follow_up=is_follow_up,
+            targeted_tags=targeted_tags,
+        )
+
+        return grade
+
+    def course_diagnostic_report(
+        self,
+        course_id: str,
+    ) -> CourseDiagnosticReport:
+        """Return the current deterministic course report."""
+
+        return self._diagnostic_agent.build_course_report(
+            course_id
+        )
+
     def course_chunk_count(self, course_id: str) -> int:
-        """Return the number of indexed chunks for one course."""
+        """Return the indexed chunk count for one course."""
 
         normalized_course_id = course_id.strip()
 

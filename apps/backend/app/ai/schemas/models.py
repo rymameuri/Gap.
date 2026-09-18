@@ -191,3 +191,67 @@ class QuizGradeResult(BaseModel):
     misconception_tags: list[str]
     confidence: float = Field(ge=0, le=1)
     requires_human_review: bool = False
+class GapStatus(str, Enum):
+    OPEN = "open"
+    STILL_STRUGGLING = "still_struggling"
+    RESOLVED = "resolved"
+
+
+class GapSeverity(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class DiagnosticAttempt(BaseModel):
+    attempt_id: str = Field(min_length=1)
+    course_id: str = Field(min_length=1)
+    student_id: str = Field(min_length=1)
+    quiz_id: str = Field(min_length=1)
+    score_percent: float = Field(ge=0, le=100)
+    misconception_tags: list[str] = Field(
+        default_factory=list
+    )
+    is_follow_up: bool = False
+    targeted_tags: list[str] = Field(
+        default_factory=list
+    )
+
+
+class MisconceptionCluster(BaseModel):
+    tag: str
+    occurrences: int = Field(ge=0)
+    affected_student_count: int = Field(ge=0)
+    affected_students: list[str]
+    resolved_student_count: int = Field(ge=0)
+    resolved_students: list[str]
+    prevalence_percent: float = Field(ge=0, le=100)
+    severity: GapSeverity
+    status: GapStatus
+
+
+class StudentRiskSummary(BaseModel):
+    student_id: str
+    attempt_count: int = Field(ge=0)
+    average_score: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    active_gaps: list[str]
+    resolved_gaps: list[str]
+    at_risk: bool
+    reasons: list[str]
+
+
+class CourseDiagnosticReport(BaseModel):
+    course_id: str
+    total_students: int = Field(ge=0)
+    total_attempts: int = Field(ge=0)
+    average_score: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    at_risk_students: list[StudentRiskSummary]
+    gap_clusters: list[MisconceptionCluster]
