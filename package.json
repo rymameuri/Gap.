@@ -20,7 +20,8 @@
     "lint:backend": "eslint apps/backend",
     "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md}\" eslint.config.js",
     "check:forbidden": "node --import tsx apps/backend/tools/check-forbidden.ts",
-    "check:backend": "npm run typecheck:backend && npm run lint:backend && npm run format:check:backend && npm test && npm run check:forbidden"
+    "check:backend": "npm run typecheck:backend && npm run lint:backend && npm run format:check:backend && npm test && npm run check:forbidden",
+    "prepare": "node apps/backend/tools/install-hooks.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.0",
