@@ -6,10 +6,11 @@ The site name and visual identity remain Gap.
 ## Run locally
 
 ```sh
+npm install
 npm run dev
 ```
 
-Open http://localhost:3000. No installation is required; the development server uses Node's built-in modules.
+Use Node.js 22.12 or newer. Open http://localhost:3000/student/ for the React and TypeScript student workspace, or http://localhost:3000 for the existing landing page. Vite prints a different port if 3000 is already in use.
 
 ## Project structure
 
