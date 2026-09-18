@@ -85,3 +85,7 @@ class ReviewResult(BaseModel):
     approved: bool
     issues: list[str] = Field(default_factory=list)
     revised_content: Optional[str] = None
+
+class LLMRouteOutput(BaseModel):
+    intent: Intent
+    reason: str = Field(min_length=1, max_length=300)
