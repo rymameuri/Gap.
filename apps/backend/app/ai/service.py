@@ -2,6 +2,10 @@ from collections.abc import Sequence
 
 from app.ai.agents.assessment_agent import AssessmentAgent
 from app.ai.agents.diagnostic_agent import DiagnosticAgent
+from app.ai.agents.reviewer import (
+    HumanReviewQueue,
+    RuleBasedReviewer,
+)
 from app.ai.agents.study_agent import (
     AsyncCompletionClient,
     StudyAgent,
@@ -20,9 +24,13 @@ from app.ai.schemas.models import (
     CourseDiagnosticReport,
     CourseDocumentInput,
     CourseIndexResult,
+    HumanReviewItem,
     QuizDifficulty,
     QuizGradeResult,
     QuizSubmission,
+    ReviewAction,
+    ReviewResult,
+    UserRole,
     WorkflowResponse,
 )
 
@@ -31,16 +39,9 @@ class AIService:
     """
     Backend-callable interface for Manara's AI system.
 
-    This service owns:
-    - The course-scoped retriever
-    - The Study Agent
-    - The Assessment Agent
-    - The Diagnostic Agent
-    - The orchestration workflow
-
     Create one AIService instance for the application. Creating a new
-    instance for each request would create an empty in-memory index and
-    remove access to previously generated quiz answer keys.
+    instance for each request would erase the in-memory course index,
+    generated quiz keys, diagnostics, and review queue.
     """
 
     def __init__(
@@ -56,6 +57,7 @@ class AIService:
         default_quiz_difficulty: QuizDifficulty = (
             QuizDifficulty.MEDIUM
         ),
+        minimum_grade_confidence: float = 0.80,
     ) -> None:
         if chunk_size_words < 1:
             raise ValueError(
@@ -111,6 +113,13 @@ class AIService:
 
         self._diagnostic_agent = DiagnosticAgent()
 
+        self._reviewer = RuleBasedReviewer(
+            minimum_grade_confidence=(
+                minimum_grade_confidence
+            )
+        )
+        self._review_queue = HumanReviewQueue()
+
         self._workflow = AgentWorkflow(
             agents={
                 AgentName.STUDY: self._study_agent,
@@ -130,11 +139,9 @@ class AIService:
         documents: Sequence[CourseDocumentInput],
     ) -> CourseIndexResult:
         """
-        Replace one course's complete in-memory document index.
+        Atomically replace one course's in-memory document index.
 
-        All documents are loaded and chunked before the existing index
-        is replaced. If loading or chunking fails, the previous course
-        index remains unchanged.
+        The previous index is preserved if loading or chunking fails.
         """
 
         normalized_course_id = course_id.strip()
@@ -214,9 +221,23 @@ class AIService:
         self,
         request: AgentRequest,
     ) -> WorkflowResponse:
-        """Route and execute one AI request."""
+        """Route, execute, review, and safely gate one request."""
 
-        return await self._workflow.run(request)
+        response = await self._workflow.run(request)
+
+        review = self._reviewer.review_agent_result(
+            response.result
+        )
+
+        reviewed_result = self._apply_review_gate(
+            request=request,
+            result=response.result,
+            review=review,
+        )
+
+        return response.model_copy(
+            update={"result": reviewed_result}
+        )
 
     async def generate_quiz(
         self,
@@ -225,14 +246,31 @@ class AIService:
         topic: str,
         question_count: int = 5,
         difficulty: QuizDifficulty = QuizDifficulty.MEDIUM,
+        requested_by: str = "system",
+        requester_role: UserRole = UserRole.TEACHER,
     ) -> AgentResult:
-        """Generate a grounded multiple-choice quiz."""
+        """Generate and review a grounded quiz."""
 
-        return await self._assessment_agent.generate_quiz(
+        result = await self._assessment_agent.generate_quiz(
             course_id=course_id,
             topic=topic,
             question_count=question_count,
             difficulty=difficulty,
+        )
+
+        request = AgentRequest(
+            user_id=requested_by,
+            course_id=course_id,
+            role=requester_role,
+            message=f"Generate a quiz about {topic}.",
+        )
+
+        review = self._reviewer.review_agent_result(result)
+
+        return self._apply_review_gate(
+            request=request,
+            result=result,
+            review=review,
         )
 
     def grade_quiz_submission(
@@ -245,16 +283,48 @@ class AIService:
         targeted_tags: Sequence[str] = (),
     ) -> QuizGradeResult:
         """
-        Grade an MCQ submission and update diagnostics.
+        Grade, review, and record an MCQ submission.
 
         course_id and student_id must come from trusted backend
-        authentication and enrolment data, not directly from
-        unverified frontend values.
+        authentication and enrolment context.
         """
 
         grade = self._assessment_agent.grade_submission(
             submission
         )
+
+        review = self._reviewer.review_grade(grade)
+
+        if not review.approved:
+            request = AgentRequest(
+                user_id=student_id,
+                course_id=course_id,
+                role=UserRole.STUDENT,
+                message="Review my quiz grade.",
+            )
+
+            review_result = AgentResult(
+                agent=AgentName.ASSESSMENT,
+                content=(
+                    "This quiz grade requires teacher review."
+                ),
+                sources=[],
+                requires_human_review=True,
+                metadata={
+                    "grade": grade.model_dump(mode="json"),
+                    "review_type": "quiz_grade",
+                },
+            )
+
+            self._review_queue.enqueue(
+                request=request,
+                result=review_result,
+                review=review,
+            )
+
+            return grade.model_copy(
+                update={"requires_human_review": True}
+            )
 
         self._diagnostic_agent.record_quiz_grade(
             course_id=course_id,
@@ -274,6 +344,37 @@ class AIService:
 
         return self._diagnostic_agent.build_course_report(
             course_id
+        )
+
+    def pending_reviews(
+        self,
+        *,
+        course_id: str | None = None,
+    ) -> list[HumanReviewItem]:
+        """List pending teacher-review items."""
+
+        return self._review_queue.list_pending(
+            course_id=course_id
+        )
+
+    def resolve_review(
+        self,
+        *,
+        review_id: str,
+        action: ReviewAction,
+        revised_content: str | None = None,
+    ) -> HumanReviewItem:
+        """
+        Resolve one queue item.
+
+        The backend must enforce teacher authorization before calling
+        this method.
+        """
+
+        return self._review_queue.resolve(
+            review_id=review_id,
+            action=action,
+            revised_content=revised_content,
         )
 
     def course_chunk_count(self, course_id: str) -> int:
@@ -298,4 +399,46 @@ class AIService:
 
         self._retriever.remove_course(
             normalized_course_id
+        )
+
+    def _apply_review_gate(
+        self,
+        *,
+        request: AgentRequest,
+        result: AgentResult,
+        review: ReviewResult,
+    ) -> AgentResult:
+        if review.approved:
+            metadata = {
+                **result.metadata,
+                "review_action": review.action.value,
+                "review_approved": True,
+            }
+
+            return result.model_copy(
+                update={"metadata": metadata}
+            )
+
+        queue_item = self._review_queue.enqueue(
+            request=request,
+            result=result,
+            review=review,
+        )
+
+        # Do not return unapproved content, sources, or structured
+        # metadata to the student.
+        return AgentResult(
+            agent=result.agent,
+            content=(
+                "This response needs instructor review "
+                "before it can be shown."
+            ),
+            sources=[],
+            requires_human_review=True,
+            metadata={
+                "review_action": review.action.value,
+                "review_approved": False,
+                "review_id": queue_item.review_id,
+                "review_issues": review.issues,
+            },
         )

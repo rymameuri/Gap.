@@ -255,3 +255,18 @@ class CourseDiagnosticReport(BaseModel):
     )
     at_risk_students: list[StudentRiskSummary]
     gap_clusters: list[MisconceptionCluster]
+
+class ReviewQueueStatus(str, Enum):
+    PENDING = "pending"
+    PUBLISHED = "published"
+    REVISED = "revised"
+
+
+class HumanReviewItem(BaseModel):
+    review_id: str = Field(min_length=1)
+    course_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    result: AgentResult
+    issues: list[str]
+    status: ReviewQueueStatus = ReviewQueueStatus.PENDING
+    final_content: str | None = None
