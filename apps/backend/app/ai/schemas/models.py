@@ -89,3 +89,18 @@ class ReviewResult(BaseModel):
 class LLMRouteOutput(BaseModel):
     intent: Intent
     reason: str = Field(min_length=1, max_length=300)
+
+class DocumentFormat(str, Enum):
+    PDF = "pdf"
+    DOCX = "docx"
+    PPTX = "pptx"
+
+
+class DocumentSection(BaseModel):
+    document_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    format: DocumentFormat
+    section_index: int = Field(ge=1)
+    text: str = Field(min_length=1)
+    page: Optional[int] = Field(default=None, ge=1)
+    slide: Optional[int] = Field(default=None, ge=1)
