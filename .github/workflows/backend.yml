@@ -45,7 +45,8 @@ jobs:
       - run: npm run typecheck:backend
       - run: npm run lint:backend
       - run: npm run format:check:backend
-      - run: npm test
+      - name: Test with coverage thresholds
+        run: npm run test:coverage
       - run: npm run check:forbidden
       - name: Check commit messages
         if: github.event_name == 'pull_request'
