@@ -1,38 +1,75 @@
 # Gap
 
-The Gap learning workspace, organized into frontend, backend, and shared data folders.
-The site name and visual identity remain Gap.
+A full-stack learning-gap workspace with a React/TypeScript frontend, an Express/TypeScript API, persistent SQLite storage, and a teacher-supervised learning loop.
 
-## Run locally
+## Quick start
+
+Requires Node.js 20.19+.
 
 ```sh
+npm install
 npm run dev
 ```
 
-Open http://localhost:3000. No installation is required; the development server uses Node's built-in modules.
+Open http://localhost:3000. The React frontend runs on port 3000 and proxies API requests to port 3001.
 
-## Project structure
+Use the Teacher demo or Student demo buttons, or sign in with:
 
-- `apps/frontend/index.html`: landing entry point.
-- `apps/frontend/src/app.js`: navigation and application actions.
-- `apps/frontend/src/pages/instructor/`: teacher screens and entry point.
-- `apps/frontend/src/pages/student/`: student screens and entry point.
-- `apps/frontend/src/pages/landing.js`: interactive landing page.
-- `apps/frontend/src/components/`: shared interface elements.
-- `apps/frontend/src/layouts/`: workspace layout.
-- `apps/frontend/src/services/`: session-scoped demo state.
-- `apps/frontend/src/styles.css`: current Gap theme.
-- `apps/backend/`: reserved for backend implementation; not connected yet.
-- `data/demo-state.js`: sample class, quiz and misconception data.
+| Role           | Email            | Demo password |
+| -------------- | ---------------- | ------------- |
+| Teacher        | teacher@gap.demo | GapDemo!2026  |
+| Student (Sara) | student@gap.demo | GapDemo!2026  |
+| Student (Omar) | omar@gap.demo    | GapDemo!2026  |
 
-The teacher and student workspaces live at `/teacher/` and `/student/`.
-Sample data is shared within a browser tab. Live AI and real accounts are not connected.
+These are deliberately seeded demonstration accounts and sample records. Set DEMO_PASSWORD before creating a fresh database to choose another password. Production seeding requires an explicit DEMO_PASSWORD.
 
-## Static output
+## The working learning loop
+
+1. Teacher supplies a syllabus and drafts an assessment.
+2. Assessment generates questions and grades submissions against a rubric.
+3. Grades below 80% confidence enter the review queue; students cannot see them until teacher approval.
+4. Diagnostic groups published misconception evidence and ranks affected topics by frequency and severity.
+5. Content prepares a focused explanation and a different follow-up question. The teacher reviews and approves it before students receive it.
+6. A student completes the recheck. A correct answer resolves only that student's gap; a wrong answer keeps it open and escalates it for teacher support.
+7. Outcomes update the dashboard and agent audit trail. All records persist across restarts.
+
+## Local engine and live AI
+
+Without model credentials, the backend uses an explicit local teaching engine for the three physics topics. Multiple-choice grading uses an answer key. Short-answer lexical evidence is deliberately held for teacher review, because keywords are not proof of semantic correctness.
+
+To enable model-backed quiz generation, rubric grading and explanations, copy `.env.example` to `.env` and set AI_GATEWAY_API_KEY and AI_GATEWAY_MODEL locally. Never commit or share the key. Restart the server afterward. Model calls use validated JSON, enforce question/score bounds, and report provider failures; they do not silently substitute local content.
+
+The model ID in the example was checked against the live gateway catalog during implementation. You can change it to another supported provider/model ID.
+
+[Gateway API documentation](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions).
+
+## Structure
+
+- `apps/frontend/src/pages/`: React landing, authentication, teacher and student screens.
+- `apps/frontend/src/components/`: shared typed UI and notices.
+- `apps/frontend/src/layouts/`: separate teacher sidebar and student top-bar experiences.
+- `apps/frontend/src/services/`: typed API client and session handling.
+- `apps/backend/src/agents/`: Diagnostic, Assessment, Content, model adapter and validation schemas.
+- `apps/backend/src/jobs.ts`: durable generation queue with restart recovery.
+- `apps/backend/src/app.ts`: validated, role-protected API endpoints.
+- `apps/backend/src/db.ts`: SQLite transactions and atomic on-disk persistence.
+- `data/schema.sql`: version-controlled relational schema.
+- `.runtime/gap.sqlite`: local database, excluded from Git.
+- `docs/architecture.md`: architecture and implementation boundaries.
+
+Authentication uses scrypt password hashes, random session tokens stored as hashes, HttpOnly cookies, expiration, login rate limits, and same-origin checks. Every teacher operation verifies class ownership; every student operation verifies enrollment or gap ownership. Unpublished answer keys and uncertain scores are omitted from student responses.
+
+## Validation and production build
 
 ```sh
+npm run typecheck
+npm test
 npm run build
+npm start
 ```
 
-The static site is generated in `dist/`. Source code lives in `src/`, not in generated output.
-Hosting configuration remains local and is excluded from Git.
+`npm start` serves the compiled application at http://localhost:3001 (or API_PORT). For HTTPS hosting, set NODE_ENV=production, APP_ORIGIN, API_HOST and an explicit DEMO_PASSWORD before seeding. Deploy the Node application with a persistent writable disk; this backend is not a static-only deployment.
+
+The SQLite export store and task runner support one Node process. Multiple replicas or heavy concurrency need a shared database and external queue. There is no public registration, password-reset flow, PDF parsing, or real school roster integration yet.
+
+The previous hosted static URL has not been replaced by this Node application. The rebuilt full-stack version runs locally until deployed to a Node-compatible host.

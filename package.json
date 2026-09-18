@@ -1,11 +1,42 @@
 {
   "name": "gap-learning-workspace",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "dev": "node dev-server.mjs",
-    "start": "node dev-server.mjs",
-    "build": "node build.mjs"
+    "dev:api": "tsx watch apps/backend/src/index.ts",
+    "dev:web": "vite --config apps/frontend/vite.config.ts",
+    "build": "npm run typecheck && vite build --config apps/frontend/vite.config.ts && tsc -p apps/backend/tsconfig.json",
+    "typecheck": "tsc --noEmit -p apps/frontend/tsconfig.json && tsc --noEmit -p apps/backend/tsconfig.json",
+    "start": "node apps/backend/build/index.js",
+    "test": "tsx --test apps/backend/src/workflow.test.ts",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,css,html,md}\" \"docs/*.md\" README.md package.json dev-server.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "sql.js": "^1.13.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sql.js": "^1.4.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "prettier": "^3.9.8",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0"
   }
 }

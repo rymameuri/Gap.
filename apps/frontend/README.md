@@ -1,4 +1,3 @@
 # Gap frontend
 
-Source is in `src/`. Run `npm run dev` from the gap-closing repository root.
-Run `npm run build` to generate `dist/`.
+React 19, TypeScript, Vite and React Router. Run `npm run dev` from the repository root. Pages and shared interface code live in `src/`; `dist/` is generated output.

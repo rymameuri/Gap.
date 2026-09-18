@@ -1,6 +1,8 @@
 .openai/
 **/.openai/
 dist/
+apps/backend/build/
+.runtime/
 node_modules/
 .env
 .env.*
