@@ -73,3 +73,11 @@ npm start
 The SQLite export store and task runner support one Node process. Multiple replicas or heavy concurrency need a shared database and external queue. There is no public registration, password-reset flow, PDF parsing, or real school roster integration yet.
 
 The previous hosted static URL has not been replaced by this Node application. The rebuilt full-stack version runs locally until deployed to a Node-compatible host.
+
+### QuantumBlack gateway
+
+Set QB_CLIENT_ID and QB_CLIENT_SECRET in the ignored server .env file, or AZURE_OPENAI_API_KEY / QB_GATEWAY_TOKEN. QB_GATEWAY_ENDPOINT, QB_GATEWAY_MODEL and QB_GATEWAY_API_VERSION override the supplied defaults. QuantumBlack takes priority over Vercel when configured. Restart the server after changing credentials. Quiz generation, grading and explanations use validated JSON; provider failures are reported without silent fallback. Credentials stay out of the frontend and Git.
+
+### Class dashboards and invitations
+
+Teachers land on /teacher and can create a class with an optional syllabus. Each class receives a unique eight-character invitation code, shown on its card and inside the teacher workspace. Students land on /student and join through that code; repeated joins do not duplicate membership. Class links retain the selected classroom, and the backend validates membership before returning class-specific student activity. Existing databases migrate automatically without removing data.

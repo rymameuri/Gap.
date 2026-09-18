@@ -6,6 +6,13 @@ import { join } from "node:path";
 import { openStore } from "./db.js";
 import { seed } from "./seed.js";
 import { createApp } from "./app.js";
+for (const key of [
+  "QB_CLIENT_ID",
+  "QB_CLIENT_SECRET",
+  "AZURE_OPENAI_API_KEY",
+  "QB_GATEWAY_TOKEN",
+])
+  delete process.env[key];
 process.env.AI_GATEWAY_API_KEY = "";
 process.env.AI_GATEWAY_MODEL = "";
 
@@ -53,6 +60,116 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
     });
     assert.equal(teacher.status, 200);
     assert.equal(student.status, 200);
+    const created = await request(
+      "/teacher/classes",
+      "POST",
+      { name: "Chemistry lab" },
+      teacher.cookie,
+    );
+    assert.equal(created.status, 201);
+    assert.match(created.data.join_code, /^[A-Z2-9]{8}$/);
+    const secondClass = await request(
+      "/teacher/classes",
+      "POST",
+      { name: "Biology lab" },
+      teacher.cookie,
+    );
+    assert.notEqual(created.data.join_code, secondClass.data.join_code);
+    assert.equal(
+      (
+        await request(
+          "/teacher/classes",
+          "POST",
+          { name: "Forbidden class" },
+          student.cookie,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request(
+          "/student/classes/join",
+          "POST",
+          { code: created.data.join_code },
+          teacher.cookie,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request(
+          "/student/classes/join",
+          "POST",
+          { code: "INVALID!" },
+          student.cookie,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          "/student/classes/join",
+          "POST",
+          { code: "ZZZZZZZZ" },
+          student.cookie,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await request(
+          "/student/workspace?classId=" + created.data.id,
+          "GET",
+          undefined,
+          student.cookie,
+        )
+      ).status,
+      404,
+    );
+    const joined = await request(
+      "/student/classes/join",
+      "POST",
+      { code: created.data.join_code.toLowerCase() },
+      student.cookie,
+    );
+    assert.equal(joined.status, 201);
+    assert.equal(
+      (
+        await request(
+          "/student/classes/join",
+          "POST",
+          { code: created.data.join_code },
+          student.cookie,
+        )
+      ).data.alreadyJoined,
+      true,
+    );
+    assert.equal(
+      store.one(
+        "SELECT COUNT(*) AS count FROM memberships WHERE class_id=? AND student_id=?",
+        [created.data.id, "sara"],
+      )?.count,
+      1,
+    );
+    const filtered = await request(
+      "/student/workspace?classId=" + created.data.id,
+      "GET",
+      undefined,
+      student.cookie,
+    );
+    assert.equal(filtered.status, 200);
+    for (const field of ["gaps", "quizzes", "grades", "progress"])
+      assert.equal(filtered.data[field].length, 0);
+    const cards = await request("/classes", "GET", undefined, student.cookie);
+    assert.ok(
+      cards.data.courses.some((course: any) => course.id === created.data.id),
+    );
+    assert.ok(cards.data.courses.every((course: any) => !course.join_code));
+
     assert.equal(
       (await request("/teacher/workspace", "GET", undefined, student.cookie))
         .status,
@@ -264,6 +381,19 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
         .n > 0,
     );
     const reopened = await openStore(file);
+    assert.equal(
+      reopened.one("SELECT join_code FROM classes WHERE id=?", [
+        created.data.id,
+      ])?.join_code,
+      created.data.join_code,
+    );
+    assert.equal(
+      reopened.one(
+        "SELECT COUNT(*) AS count FROM memberships WHERE class_id=? AND student_id=?",
+        [created.data.id, "sara"],
+      )?.count,
+      1,
+    );
     assert.equal(
       reopened.one("SELECT status FROM gaps WHERE id=?", [saraGap.id])!.status,
       "resolved",

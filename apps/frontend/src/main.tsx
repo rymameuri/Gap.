@@ -12,6 +12,7 @@ import { NoticeProvider } from "./components/ui";
 import { TeacherLayout } from "./layouts/workspace";
 import { StudentLayout, CourseLayout } from "./layouts/StudentLayout";
 import { Login } from "./pages/auth/Login";
+import { ClassDashboard } from "./pages/ClassDashboard";
 import { Landing } from "./pages/Landing";
 import {
   Overview,
@@ -21,7 +22,6 @@ import {
   Materials,
   AgentActivity,
 } from "./pages/instructor/TeacherPages";
-import { MyCourses } from "./pages/student/MyCourses";
 import { CourseOverview } from "./pages/student/CourseOverview";
 import { StudyAssistant } from "./pages/student/StudyAssistant";
 import { Practice } from "./pages/student/Practice";
@@ -84,11 +84,27 @@ createRoot(document.getElementById("root")!).render(
             path="/teacher"
             element={
               <Guard role="teacher">
+                <ClassDashboard role="teacher" />
+              </Guard>
+            }
+          />
+          <Route
+            path="/student"
+            element={
+              <Guard role="student">
+                <ClassDashboard role="student" />
+              </Guard>
+            }
+          />
+          <Route
+            path="/teacher"
+            element={
+              <Guard role="teacher">
                 <TeacherLayout />
               </Guard>
             }
           >
-            <Route index element={<Overview />} />
+            <Route path="overview" element={<Overview />} />
             <Route path="assessments" element={<Assessments />} />
             <Route path="review" element={<ReviewQueue />} />
             <Route path="content" element={<ContentStudio />} />
@@ -103,7 +119,6 @@ createRoot(document.getElementById("root")!).render(
               </Guard>
             }
           >
-            <Route index element={<MyCourses />} />
             <Route path="courses/:courseId" element={<CourseLayout />}>
               <Route index element={<CourseOverview />} />
               <Route path="assistant" element={<StudyAssistant />} />
@@ -113,6 +128,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="materials" element={<StudentMaterials />} />
               <Route path="progress" element={<Progress />} />
             </Route>
+            <Route path="learning" element={<LegacyStudentRoute />} />
             <Route path="gaps/:id" element={<LegacyStudentRoute />} />
             <Route
               path="assessments"

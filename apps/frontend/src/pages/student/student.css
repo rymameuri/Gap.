@@ -385,6 +385,14 @@
   max-width: 1400px;
   min-width: 0;
 }
+.s-main.s-main-assistant {
+  min-height: calc(100vh - 76px);
+  max-width: none;
+  padding: 0;
+}
+.s-main-assistant .s-breadcrumb {
+  display: none;
+}
 .s-breadcrumb {
   display: flex;
   align-items: center;
@@ -579,8 +587,9 @@
 .s-assistant-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  min-height: calc(100vh - 190px);
-  margin: -8px -40px -60px;
+  height: calc(100vh - 76px);
+  height: calc(100dvh - 76px);
+  min-height: 0;
   border-top: 1px solid var(--s-line);
   background: #fff;
 }
@@ -590,7 +599,7 @@
 .s-conversation {
   display: flex;
   min-width: 0;
-  min-height: calc(100vh - 190px);
+  min-height: 0;
   flex-direction: column;
   background: #fbfcfd;
 }
@@ -644,14 +653,17 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   flex-direction: column;
 }
 .s-thread-content {
   display: grid;
   flex: 1;
+  min-height: 0;
   width: min(760px, calc(100% - 44px));
   margin: 0 auto;
   padding: 46px 0 28px;
+  overflow-y: auto;
   place-items: center;
 }
 .s-assistant-symbol {
@@ -809,8 +821,10 @@
 }
 .s-sources-panel {
   display: block;
+  height: 100%;
   min-width: 0;
   padding: 20px;
+  overflow-y: auto;
   border-right: 0;
   border-left: 1px solid var(--s-line);
   background: #f5f7f8;
@@ -1317,6 +1331,29 @@
 .s-history-dot.success {
   background: #6b84af;
 }
+@media (max-height: 720px) {
+  .s-thread-content {
+    padding-block: 14px;
+  }
+  .s-assistant-symbol {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 10px;
+  }
+  .s-assistant-welcome > p,
+  .s-suggestions {
+    display: none;
+  }
+  .s-composer-input textarea {
+    min-height: 82px;
+  }
+  .s-composer-note {
+    margin-top: 5px;
+  }
+  .s-instructor-question {
+    margin-bottom: 8px;
+  }
+}
 @media (min-width: 1500px) {
   .s-main {
     padding-inline: 56px;
@@ -1347,10 +1384,6 @@
   }
   .s-progress-topics article > .s-text-link {
     grid-column: 1 / -1;
-  }
-  .s-assistant-page {
-    margin-right: -28px;
-    margin-left: -28px;
   }
   .s-assistant-page.with-sources {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
@@ -1427,12 +1460,17 @@
   .s-main {
     padding: 24px 22px 45px;
   }
+  .s-main.s-main-assistant {
+    min-height: calc(100vh - 109px);
+    min-height: calc(100dvh - 109px);
+    padding: 0;
+  }
   .s-assistant-page {
-    min-height: calc(100vh - 202px);
-    margin: -6px -22px -45px;
+    height: calc(100vh - 109px);
+    height: calc(100dvh - 109px);
   }
   .s-conversation {
-    min-height: calc(100vh - 202px);
+    min-height: 0;
   }
   .s-assistant-page.with-sources {
     grid-template-columns: minmax(0, 1fr);

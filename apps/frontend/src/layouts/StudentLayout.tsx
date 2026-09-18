@@ -126,6 +126,7 @@ export function CourseLayout() {
       : pathname.includes("/quizzes/")
         ? "Quiz"
         : "Overview");
+  const isAssistant = pathname.endsWith("/assistant");
   if (!course)
     return (
       <main id="student-content" className="s-course-list">
@@ -184,7 +185,10 @@ export function CourseLayout() {
           Course connected<span>Instructor updates appear here.</span>
         </div>
       </aside>
-      <main className="s-main" id="student-content">
+      <main
+        className={`s-main ${isAssistant ? "s-main-assistant" : ""}`}
+        id="student-content"
+      >
         <div className="s-breadcrumb">
           <Link to={coursePath(course.id)}>{course.name}</Link>
           <ChevronRight size={14} aria-hidden="true" />

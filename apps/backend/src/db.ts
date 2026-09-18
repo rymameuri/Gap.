@@ -96,10 +96,38 @@ export async function openStore(
   db.run("PRAGMA foreign_keys=ON;");
   db.run(readFileSync(resolve("data/schema.sql"), "utf8"));
   const store = new Store(db, actual);
+  if (
+    !store
+      .all("PRAGMA table_info(classes)")
+      .some((column) => column.name === "join_code")
+  )
+    store.run("ALTER TABLE classes ADD COLUMN join_code TEXT");
+  store.run(
+    "CREATE UNIQUE INDEX IF NOT EXISTS classes_join_code ON classes(join_code)",
+  );
+  for (const course of store.all(
+    "SELECT id FROM classes WHERE join_code IS NULL",
+  ))
+    store.run("UPDATE classes SET join_code=? WHERE id=?", [
+      classCode(store),
+      course.id,
+    ]);
   store.save();
   return store;
 }
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return salt + ":" + scryptSync(password, salt, 64).toString("hex");
+}
+
+export function classCode(store: Store): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (;;) {
+    const code = Array.from(
+      randomBytes(8),
+      (value) => alphabet[value % alphabet.length],
+    ).join("");
+    if (!store.one("SELECT id FROM classes WHERE join_code=?", [code]))
+      return code;
+  }
 }

@@ -4,6 +4,8 @@ import {
   Outlet,
   useOutletContext,
   useNavigate,
+  useSearchParams,
+  Link,
 } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -15,14 +17,19 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "../services/api";
 import { useSession } from "../services/session";
-import type { TeacherData } from "../services/types";
+import type { TeacherData, StudentData } from "../services/types";
 import { Brand, ErrorBox, EngineNote } from "../components/ui";
 export type TeacherContext = {
   data: TeacherData;
   refresh: () => Promise<void>;
   selectClass: (id: string) => void;
 };
+export type StudentContext = {
+  data: StudentData;
+  refresh: () => Promise<void>;
+};
 export const useTeacher = () => useOutletContext<TeacherContext>();
+export const useStudent = () => useOutletContext<StudentContext>();
 export function useWorkspace<T>(path: string) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState("");
@@ -33,7 +40,9 @@ export function useWorkspace<T>(path: string) {
       setError("");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        navigate("/login/student");
+        navigate(
+          path.startsWith("/teacher") ? "/login/teacher" : "/login/student",
+        );
         return;
       }
       setError(e instanceof Error ? e.message : "Unable to load workspace.");
@@ -49,13 +58,15 @@ export function useWorkspace<T>(path: string) {
 export function TeacherLayout() {
   const { user, logout } = useSession(),
     navigate = useNavigate();
-  const [classId, setClassId] = useState("");
+  const [params, setParams] = useSearchParams();
+  const classId = params.get("classId") || "";
+  const setClassId = (id: string) => setParams({ classId: id });
   const { data, error, refresh } = useWorkspace<TeacherData>(
     "/teacher/workspace" +
       (classId ? "?classId=" + encodeURIComponent(classId) : ""),
   );
   const links = [
-    ["", "Overview", LayoutDashboard],
+    ["overview", "Overview", LayoutDashboard],
     ["assessments", "Assessments", ClipboardList],
     ["review", "Review queue", BookOpen],
     ["content", "Content studio", FileText],
@@ -69,12 +80,15 @@ export function TeacherLayout() {
         <div className="eyebrow" style={{ marginBottom: 12 }}>
           TEACHER WORKSPACE
         </div>
+        <Link className="navitem" to="/teacher/">
+          ← All classes
+        </Link>
         <nav>
           {links.map(([path, label, Icon]) => (
             <NavLink
               key={path}
               end={!path}
-              to={"/teacher/" + path}
+              to={"/teacher/" + path + (classId ? "?classId=" + classId : "")}
               className={({ isActive }) =>
                 "navitem " + (isActive ? "active" : "")
               }
@@ -125,6 +139,14 @@ export function TeacherLayout() {
             )}
           </div>
           <div className="workspaceidentity">
+            {data?.course?.join_code && (
+              <span
+                className="class-code-small"
+                title="Share this code with your students"
+              >
+                Class code: <code>{data.course.join_code}</code>
+              </span>
+            )}
             <span className="avatar">T</span>Teacher workspace
           </div>
         </header>
@@ -142,6 +164,60 @@ export function TeacherLayout() {
                 } satisfies TeacherContext
               }
             />
+            <EngineNote engine={data.engine} />
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+export function StudentLayout() {
+  const { user, logout } = useSession(),
+    navigate = useNavigate();
+  const [params] = useSearchParams();
+  const classId = params.get("classId") || "";
+  const search = classId ? "?classId=" + encodeURIComponent(classId) : "";
+  const { data, error, refresh } = useWorkspace<StudentData>(
+    "/student/workspace" + search,
+  );
+  return (
+    <div className="student-shell">
+      <header className="student-header">
+        <Brand />
+        <div className="student-identity">
+          <span className="avatar">
+            {user?.name
+              .split(" ")
+              .map((n) => n[0])
+              .join("")}
+          </span>
+          {user?.name}
+          <button
+            className="btn small"
+            onClick={async () => {
+              await logout();
+              navigate("/");
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+      <nav className="student-nav" aria-label="Student navigation">
+        <NavLink end to="/student/">
+          All classes
+        </NavLink>
+        <NavLink to={"/student/learning" + search}>My learning</NavLink>
+        <NavLink to={"/student/assessments" + search}>Assessments</NavLink>
+        <NavLink to={"/student/progress" + search}>Progress</NavLink>
+      </nav>
+      <main>
+        {error && <ErrorBox message={error} />}{" "}
+        {!data ? (
+          <p>Loading your learning…</p>
+        ) : (
+          <>
+            <Outlet context={{ data, refresh } satisfies StudentContext} />
             <EngineNote engine={data.engine} />
           </>
         )}
