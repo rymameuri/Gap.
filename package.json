@@ -13,12 +13,14 @@
     "build": "npm run typecheck && vite build --config apps/frontend/vite.config.ts && tsc -p apps/backend/tsconfig.json",
     "typecheck": "tsc --noEmit -p apps/frontend/tsconfig.json && tsc --noEmit -p apps/backend/tsconfig.json",
     "start": "node apps/backend/build/index.js",
-    "test": "tsx --test apps/backend/src/workflow.test.ts",
+    "test": "tsx --test \"apps/backend/src/**/*.test.ts\" \"apps/backend/tools/**/*.test.ts\"",
     "test:student": "node --import tsx --test apps/frontend/src/pages/student/course-model.test.ts",
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,html,md}\" \"docs/*.md\" README.md package.json dev-server.mjs",
     "typecheck:backend": "tsc --noEmit -p apps/backend/tsconfig.test.json",
     "lint:backend": "eslint apps/backend",
-    "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md}\" eslint.config.js"
+    "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md}\" eslint.config.js",
+    "check:forbidden": "node --import tsx apps/backend/tools/check-forbidden.ts",
+    "check:backend": "npm run typecheck:backend && npm run lint:backend && npm run format:check:backend && npm test && npm run check:forbidden"
   },
   "dependencies": {
     "dotenv": "^16.4.0",
