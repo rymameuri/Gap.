@@ -1,0 +1,11 @@
+{
+  "name": "gap-learning-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "start": "node dev-server.mjs",
+    "build": "node build.mjs"
+  }
+}
