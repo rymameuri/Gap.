@@ -104,3 +104,9 @@ class DocumentSection(BaseModel):
     text: str = Field(min_length=1)
     page: Optional[int] = Field(default=None, ge=1)
     slide: Optional[int] = Field(default=None, ge=1)
+
+class StudyAgentOutput(BaseModel):
+    """Structured output produced by the Study Agent."""
+
+    answer: str = Field(min_length=1, max_length=10_000)
+    used_source_ids: list[str] = Field(default_factory=list)
