@@ -6,6 +6,10 @@ import {
 } from "node:crypto";
 import type { RequestHandler, Response } from "express";
 import type { Store } from "./db.js";
+import type { Logger } from "./logger.js";
+import { SESSION_COOKIE, SESSION_TTL_MS } from "./constants.js";
+import { ForbiddenError, UnauthenticatedError } from "./errors.js";
+
 export type AuthUser = {
   id: string;
   name: string;
@@ -16,66 +20,92 @@ declare global {
   namespace Express {
     interface Request {
       user: AuthUser;
+      id: string;
+      log: Logger;
     }
   }
 }
-export const tokenHash = (token: string) =>
+
+const SCRYPT_KEY_LENGTH = 64;
+const SESSION_TOKEN_BYTES = 32;
+// Format written by hashPassword in db.ts: hex salt, colon, hex scrypt key.
+const STORED_PASSWORD = new RegExp(
+  `^([0-9a-f]+):([0-9a-f]{${String(SCRYPT_KEY_LENGTH * 2)}})$`,
+);
+
+export const tokenHash = (token: string): string =>
   createHash("sha256").update(token).digest("hex");
-export function sessionToken(header: string | undefined) {
+
+export function sessionToken(header: string | undefined): string {
   return (
     header
       ?.split(";")
       .map((x) => x.trim())
-      .find((x) => x.startsWith("gap_session="))
-      ?.slice("gap_session=".length) || ""
+      .find((x) => x.startsWith(SESSION_COOKIE + "="))
+      ?.slice(SESSION_COOKIE.length + 1) ?? ""
   );
 }
-export function checkPassword(input: string, stored: string) {
-  try {
-    const [salt, hash] = stored.split(":");
-    const expected = Buffer.from(hash, "hex"),
-      actual = scryptSync(input, salt, 64);
-    return (
-      expected.length === actual.length && timingSafeEqual(expected, actual)
-    );
-  } catch {
-    return false;
-  }
+
+/** Compares `input` with a stored `salt:hash` value in constant time. Malformed stored values never match. */
+export function checkPassword(input: string, stored: string): boolean {
+  const match = STORED_PASSWORD.exec(stored);
+  if (match === null) return false;
+  const [, salt, hash] = match;
+  const expected = Buffer.from(hash, "hex");
+  const actual = scryptSync(input, salt, SCRYPT_KEY_LENGTH);
+  return timingSafeEqual(expected, actual);
 }
-export function setSession(store: Store, response: Response, userId: string) {
-  const token = randomBytes(32).toString("hex");
+
+export function setSession(
+  store: Store,
+  response: Response,
+  userId: string,
+  secureCookie: boolean,
+): void {
+  const token = randomBytes(SESSION_TOKEN_BYTES).toString("hex");
   store.run("INSERT INTO sessions VALUES(?,?,?)", [
     tokenHash(token),
     userId,
-    Date.now() + 8 * 60 * 60 * 1000,
+    Date.now() + SESSION_TTL_MS,
   ]);
-  response.cookie("gap_session", token, {
+  response.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 8 * 60 * 60 * 1000,
+    secure: secureCookie,
+    maxAge: SESSION_TTL_MS,
     path: "/",
   });
 }
+
 export const authenticated =
   (store: Store): RequestHandler =>
-  (req, res, next) => {
+  (req, _res, next) => {
     const token = sessionToken(req.headers.cookie);
     const user = store.one<AuthUser>(
       "SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
       [tokenHash(token), Date.now()],
     );
     if (!user) {
-      res.status(401).json({ error: "Please sign in to continue." });
+      next(new UnauthenticatedError("Please sign in to continue."));
       return;
     }
     req.user = user;
+    req.log = req.log.child({ userId: user.id });
     next();
   };
-export const teacherOnly: RequestHandler = (req, res, next) => {
-  if (req.user.role !== "teacher") {
-    res.status(403).json({ error: "Teacher access is required." });
-    return;
-  }
-  next();
+
+export const teacherOnly: RequestHandler = (req, _res, next) => {
+  next(
+    req.user.role === "teacher"
+      ? undefined
+      : new ForbiddenError("Teacher access is required."),
+  );
+};
+
+export const studentOnly: RequestHandler = (req, _res, next) => {
+  next(
+    req.user.role === "student"
+      ? undefined
+      : new ForbiddenError("Student access is required."),
+  );
 };
