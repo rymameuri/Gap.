@@ -110,3 +110,9 @@ class StudyAgentOutput(BaseModel):
 
     answer: str = Field(min_length=1, max_length=10_000)
     used_source_ids: list[str] = Field(default_factory=list)
+
+class WorkflowResponse(BaseModel):
+    """Final response returned by the AI orchestration workflow."""
+
+    route: RouteDecision
+    result: AgentResult
