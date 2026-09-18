@@ -9,7 +9,11 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "build",
-    "rootDir": "src"
+    "rootDir": "src",
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]

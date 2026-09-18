@@ -42,12 +42,16 @@ function listeningPort(server: Server): number {
   return address.port;
 }
 
-/** Starts the app on an in-memory seeded database and a random local port. */
+/** Starts the app on a seeded database (in memory unless DATABASE_PATH is given) and a random local port. */
 export async function startTestServer(
   env: Record<string, string> = {},
 ): Promise<TestServer> {
-  const config = loadConfig({ NODE_ENV: "test", ...env });
-  const store = await openStore(":memory:");
+  const config = loadConfig({
+    NODE_ENV: "test",
+    DATABASE_PATH: ":memory:",
+    ...env,
+  });
+  const store = await openStore(config.databasePath);
   seed(store, config.demoPassword);
   const logs: Record<string, unknown>[] = [];
   const logger = createLogger("info", {

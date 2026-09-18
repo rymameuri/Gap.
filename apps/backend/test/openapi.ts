@@ -141,9 +141,9 @@ export class Contract {
     ref: string,
   ): ResponseObject {
     const name = ref.slice(RESPONSE_REF.length);
-    if (!Object.hasOwn(responses, name))
-      assert.fail(`unresolved response ${ref}`);
-    return responses[name];
+    const response = responses[name];
+    if (response === undefined) assert.fail(`unresolved response ${ref}`);
+    return response;
   }
 
   /**

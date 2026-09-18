@@ -10,15 +10,33 @@ import { dirname, resolve } from "node:path";
 import { randomUUID, scryptSync, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { migrate } from "./migrate.js";
+
 const require = createRequire(import.meta.url);
+
+const MEMORY = ":memory:";
+const DATABASE_FILE_MODE = 0o600;
+const PASSWORD_SALT_BYTES = 16;
+const PASSWORD_KEY_LENGTH = 64;
+
+// Default row type for callers that do not declare their columns. Only
+// src/agents relies on it (owned by the agents team); backend code passes an
+// explicit row type. It stays `any` because agent code reads columns by name
+// and would not compile under noUncheckedIndexedAccess otherwise.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
 export type Row = Record<string, any>;
+
 export class Store {
   private inTransaction = false;
   constructor(
     readonly db: Database,
     readonly path: string,
   ) {}
-  all<T extends Row = Row>(sql: string, params: SqlValue[] = []): T[] {
+
+  /**
+   * Runs a query and returns every row. Rows are not checked at runtime: `T`
+   * must describe the columns the SELECT returns.
+   */
+  all<T extends object = Row>(sql: string, params: SqlValue[] = []): T[] {
     const stmt = this.db.prepare(sql);
     try {
       stmt.bind(params);
@@ -29,16 +47,23 @@ export class Store {
       stmt.free();
     }
   }
-  one<T extends Row = Row>(
+
+  // T declares the columns of the SELECT, like the type argument of all().
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- see above
+  one<T extends object = Row>(
     sql: string,
     params: SqlValue[] = [],
   ): T | undefined {
-    return this.all<T>(sql, params)[0];
+    return this.all<T>(sql, params).at(0);
   }
-  run(sql: string, params: SqlValue[] = []) {
+
+  /** Runs one statement and saves, unless inside a transaction. */
+  run(sql: string, params: SqlValue[] = []): void {
     this.db.run(sql, params);
     if (!this.inTransaction) this.save();
   }
+
+  /** Runs `fn` atomically and saves once on commit. Nested calls join the outer transaction. */
   transaction<T>(fn: () => T): T {
     if (this.inTransaction) return fn();
     this.db.run("BEGIN IMMEDIATE");
@@ -55,13 +80,17 @@ export class Store {
       throw e;
     }
   }
-  save() {
-    if (this.path === ":memory:") return;
+
+  /** Writes the database file atomically. No-op for in-memory databases. */
+  save(): void {
+    if (this.path === MEMORY) return;
     mkdirSync(dirname(this.path), { recursive: true });
     const temp = this.path + ".tmp";
-    writeFileSync(temp, this.db.export(), { mode: 0o600 });
+    writeFileSync(temp, this.db.export(), { mode: DATABASE_FILE_MODE });
     renameSync(temp, this.path);
   }
+
+  /** Appends an audit event for the class activity feed. */
   event(
     classId: string,
     agent: string,
@@ -69,7 +98,7 @@ export class Store {
     details: unknown,
     studentId: string | null = null,
     jobId: string | null = null,
-  ) {
+  ): void {
     this.run("INSERT INTO events VALUES(?,?,?,?,?,?,?,?)", [
       randomUUID(),
       classId,
@@ -82,6 +111,7 @@ export class Store {
     ]);
   }
 }
+
 export interface OpenStoreOptions {
   /** Apply pending migrations before returning. Defaults to true. */
   readonly migrate?: boolean;
@@ -99,18 +129,20 @@ export async function openStore(
   const SQL = await initSqlJs({
     locateFile: (file) => require.resolve("sql.js/dist/" + file),
   });
-  const actual = path === ":memory:" ? path : resolve(path);
+  const actual = path === MEMORY ? path : resolve(path);
   const db = new SQL.Database(
-    actual !== ":memory:" && existsSync(actual)
-      ? readFileSync(actual)
-      : undefined,
+    actual !== MEMORY && existsSync(actual) ? readFileSync(actual) : undefined,
   );
   db.run("PRAGMA foreign_keys=ON;");
   const store = new Store(db, actual);
   if (options.migrate ?? true) migrate(store);
   return store;
 }
-export function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  return salt + ":" + scryptSync(password, salt, 64).toString("hex");
+
+/** Returns `salt:hash` for storage; see checkPassword in auth.ts. */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(PASSWORD_SALT_BYTES).toString("hex");
+  return (
+    salt + ":" + scryptSync(password, salt, PASSWORD_KEY_LENGTH).toString("hex")
+  );
 }

@@ -10,19 +10,20 @@ import type { Logger } from "./logger.js";
 import { SESSION_COOKIE, SESSION_TTL_MS } from "./constants.js";
 import { ForbiddenError, UnauthenticatedError } from "./errors.js";
 
-export type AuthUser = {
+export interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: "teacher" | "student";
-};
-declare global {
-  namespace Express {
-    interface Request {
-      user: AuthUser;
-      id: string;
-      log: Logger;
-    }
+}
+
+// Set by requestContext (id, log) and authenticated (user) before route
+// handlers run; routes outside the session guard must not read `user`.
+declare module "express-serve-static-core" {
+  interface Request {
+    user: AuthUser;
+    id: string;
+    log: Logger;
   }
 }
 
@@ -51,9 +52,15 @@ export function checkPassword(input: string, stored: string): boolean {
   const match = STORED_PASSWORD.exec(stored);
   if (match === null) return false;
   const [, salt, hash] = match;
+  if (salt === undefined || hash === undefined) return false;
   const expected = Buffer.from(hash, "hex");
   const actual = scryptSync(input, salt, SCRYPT_KEY_LENGTH);
   return timingSafeEqual(expected, actual);
+}
+
+/** Deletes the session for `token`; unknown tokens are ignored. */
+export function deleteSession(store: Store, token: string): void {
+  store.run("DELETE FROM sessions WHERE token_hash=?", [tokenHash(token)]);
 }
 
 export function setSession(

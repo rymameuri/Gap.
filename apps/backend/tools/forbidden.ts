@@ -55,10 +55,7 @@ const SCOPE_PREFIXES: readonly string[] = [
   ".github/",
   ".githooks/",
 ];
-const SCOPE_FILES: readonly string[] = [
-  "eslint.config.js",
-  "eslint-suppressions.json",
-];
+const SCOPE_FILES: readonly string[] = ["eslint.config.js"];
 const EXCLUDED_PREFIXES: readonly string[] = [
   "apps/backend/src/agents/",
   "apps/backend/app/",
