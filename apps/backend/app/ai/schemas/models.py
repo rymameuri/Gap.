@@ -132,3 +132,62 @@ class CourseIndexResult(BaseModel):
     document_count: int = Field(ge=1)
     section_count: int = Field(ge=1)
     chunk_count: int = Field(ge=1)
+
+class QuizDifficulty(str, Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
+class QuizQuestion(BaseModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    prompt: str = Field(min_length=1, max_length=2_000)
+    choices: list[str] = Field(min_length=4, max_length=4)
+    source_ids: list[str] = Field(min_length=1)
+
+
+class QuizAnswerKeyItem(BaseModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    correct_choice_index: int = Field(ge=0, le=3)
+    explanation: str = Field(min_length=1, max_length=4_000)
+    misconception_tag: str = Field(min_length=1, max_length=200)
+
+
+class QuizGenerationOutput(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    questions: list[QuizQuestion] = Field(min_length=1)
+    answer_key: list[QuizAnswerKeyItem] = Field(min_length=1)
+
+
+class GeneratedQuiz(BaseModel):
+    quiz_id: str = Field(min_length=1)
+    title: str
+    topic: str
+    difficulty: QuizDifficulty
+    questions: list[QuizQuestion]
+    sources: list[SourceReference]
+
+
+class QuizSubmission(BaseModel):
+    quiz_id: str = Field(min_length=1)
+    answers: dict[str, int] = Field(default_factory=dict)
+
+
+class QuestionGrade(BaseModel):
+    question_id: str
+    selected_choice_index: int | None = None
+    correct_choice_index: int
+    is_correct: bool
+    explanation: str
+    misconception_tag: str | None = None
+
+
+class QuizGradeResult(BaseModel):
+    quiz_id: str
+    correct_count: int = Field(ge=0)
+    total_questions: int = Field(ge=1)
+    score_percent: float = Field(ge=0, le=100)
+    question_results: list[QuestionGrade]
+    misconception_tags: list[str]
+    confidence: float = Field(ge=0, le=1)
+    requires_human_review: bool = False
