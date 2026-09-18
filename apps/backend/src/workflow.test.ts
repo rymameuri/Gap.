@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { openStore } from "./db.js";
 import { seed } from "./seed.js";
 import { createApp } from "./app.js";
+import { loadConfig } from "./config.js";
+import { createLogger } from "./logger.js";
 for (const key of [
   "QB_CLIENT_ID",
   "QB_CLIENT_SECRET",
@@ -15,13 +17,18 @@ for (const key of [
   delete process.env[key];
 process.env.AI_GATEWAY_API_KEY = "";
 process.env.AI_GATEWAY_MODEL = "";
+const config = loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" });
 
 test("Durable teacher/student loop enforces review, approval, isolation and verified outcomes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "gap-workflow-"));
   const file = join(directory, "test.sqlite"),
     store = await openStore(file);
-  seed(store);
-  const server = createApp(store).listen(0, "127.0.0.1");
+  seed(store, config.demoPassword);
+  const server = createApp({
+    store,
+    config,
+    logger: createLogger("silent"),
+  }).listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
   assert.ok(address && typeof address !== "string");
@@ -52,11 +59,11 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
     assert.equal((await request("/teacher/workspace")).status, 401);
     const teacher = await request("/auth/login", "POST", {
       email: "teacher@gap.demo",
-      password: process.env.DEMO_PASSWORD || "GapDemo!2026",
+      password: config.demoPassword,
     });
     const student = await request("/auth/login", "POST", {
       email: "student@gap.demo",
-      password: process.env.DEMO_PASSWORD || "GapDemo!2026",
+      password: config.demoPassword,
     });
     assert.equal(teacher.status, 200);
     assert.equal(student.status, 200);

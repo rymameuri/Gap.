@@ -1,14 +1,26 @@
 import { randomUUID } from "node:crypto";
 import type { Store } from "./db.js";
+import type { Logger } from "./logger.js";
 import { draftAssessment } from "./agents/assessment.js";
 import { prepareContent } from "./agents/content.js";
 import { engineName } from "./agents/provider.js";
 import { diagnose } from "./agents/diagnostic.js";
 export class AgentQueue {
   private active = false;
-  constructor(private store: Store) {
+  constructor(
+    private store: Store,
+    private logger: Logger,
+  ) {
     store.run("UPDATE jobs SET status='queued' WHERE status='running'");
-    void this.drain();
+    this.startDrain();
+  }
+  // drain() handles task failures itself; this catches failures of the queue
+  // bookkeeping, such as a database write error, which would otherwise be an
+  // unhandled rejection.
+  private startDrain(): void {
+    this.drain().catch((error: unknown) => {
+      this.logger.error({ err: error }, "agent queue stopped");
+    });
   }
   enqueue(
     classId: string,
@@ -30,7 +42,7 @@ export class AgentQueue {
       now,
       now,
     ]);
-    void this.drain();
+    this.startDrain();
     return id;
   }
   private async drain() {
@@ -154,9 +166,17 @@ export class AgentQueue {
             "UPDATE jobs SET status='succeeded',result=?,updated_at=? WHERE id=?",
             [JSON.stringify(result), new Date().toISOString(), job.id],
           );
+          this.logger.info(
+            { jobId: job.id, kind: job.kind },
+            "agent task succeeded",
+          );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Agent task failed";
+          this.logger.warn(
+            { jobId: job.id, kind: job.kind, err: error },
+            "agent task failed",
+          );
           this.store.run(
             "UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?",
             [message, new Date().toISOString(), job.id],

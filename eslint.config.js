@@ -28,14 +28,30 @@ export default tseslint.config(
     },
     rules: {
       eqeqeq: ["error", "always"],
+      "no-console": "error",
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "process",
+          property: "env",
+          message:
+            "Read configuration through loadConfig (src/config.ts); only the entry point passes process.env to it.",
+        },
+      ],
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/explicit-module-boundary-types": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
     },
   },
   {
+    files: ["apps/backend/src/index.ts"],
+    rules: { "no-restricted-properties": "off" },
+  },
+  {
     files: ["apps/backend/**/*.test.ts"],
     rules: {
+      // Tests clear the agent provider variables that src/agents reads directly.
+      "no-restricted-properties": "off",
       // node:test tracks the promises returned by describe/test itself.
       "@typescript-eslint/no-floating-promises": [
         "error",

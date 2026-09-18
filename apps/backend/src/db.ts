@@ -81,9 +81,7 @@ export class Store {
     ]);
   }
 }
-export async function openStore(
-  path = process.env.DATABASE_PATH || ".runtime/gap.sqlite",
-) {
+export async function openStore(path: string) {
   const SQL = await initSqlJs({
     locateFile: (file) => require.resolve("sql.js/dist/" + file),
   });
