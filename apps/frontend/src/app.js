@@ -1,4 +1,4 @@
-import { initial } from '../../../data/demo-state.js';
+import { initial } from '/data/demo-state.js';
 import { loadDemoState, saveDemoState } from './services/demo-store.js';
 import { esc, toast } from './components/ui.js';
 import { renderLanding } from './pages/landing.js';
