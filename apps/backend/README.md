@@ -19,6 +19,18 @@ The server reads environment variables once at startup through `loadConfig` in `
 
 The model provider variables in `.env.example` are read by `src/agents` and documented there by the agents team.
 
+## API contract
+
+`openapi.yaml` (OpenAPI 3.1) documents every endpoint the frontend calls: paths, request bodies, response fields and status codes. It follows the frontend in `apps/frontend` (`services/api.ts`, `services/types.ts` and the calls in `pages/`). Fields the frontend reads are required; extra columns are allowed. Fields that must never reach a client, such as answer keys in student payloads or the score of a grade awaiting review, are forbidden with `not`.
+
+`src/contract.test.ts` enforces it:
+
+- every response the suite receives is validated against the documented schema for its operation and status, and an undocumented status fails;
+- every documented operation and status must be exercised at least once;
+- the Express routes and the documented paths must match exactly.
+
+When the frontend adds or changes a call, update `openapi.yaml` in the same change as the backend, then add or adjust the matching case in `src/contract.test.ts`.
+
 ## Errors
 
 Every API error response has the same body:
