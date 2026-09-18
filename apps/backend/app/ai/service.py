@@ -24,6 +24,8 @@ from app.ai.schemas.models import (
     CourseDiagnosticReport,
     CourseDocumentInput,
     CourseIndexResult,
+    DocumentFormat,
+    DocumentSection,
     HumanReviewItem,
     QuizDifficulty,
     QuizGradeResult,
@@ -214,6 +216,66 @@ class AIService:
             document_ids=document_ids,
             document_count=len(document_list),
             section_count=len(all_sections),
+            chunk_count=len(chunks),
+        )
+
+    def replace_course_text(
+        self,
+        *,
+        course_id: str,
+        document_id: str,
+        title: str,
+        text: str,
+    ) -> CourseIndexResult:
+        """Atomically index trusted plain-text course material."""
+
+        normalized_course_id = course_id.strip()
+        normalized_document_id = document_id.strip()
+        normalized_title = title.strip()
+        normalized_text = text.strip()
+
+        if not normalized_course_id:
+            raise ValueError("course_id cannot be empty.")
+
+        if not normalized_document_id:
+            raise ValueError("document_id cannot be empty.")
+
+        if not normalized_title:
+            raise ValueError("title cannot be empty.")
+
+        if not normalized_text:
+            raise ValueError("text cannot be empty.")
+
+        sections = [
+            DocumentSection(
+                document_id=normalized_document_id,
+                title=normalized_title,
+                format=DocumentFormat.TEXT,
+                section_index=1,
+                text=normalized_text,
+            )
+        ]
+        chunks = chunk_sections(
+            sections=sections,
+            chunk_size_words=self._chunk_size_words,
+            overlap_words=self._overlap_words,
+        )
+
+        if not chunks:
+            raise ValueError(
+                "The course text produced no searchable chunks."
+            )
+
+        self._retriever.replace_course(
+            normalized_course_id,
+            chunks,
+        )
+
+        return CourseIndexResult(
+            course_id=normalized_course_id,
+            document_ids=[normalized_document_id],
+            document_count=1,
+            section_count=1,
             chunk_count=len(chunks),
         )
 

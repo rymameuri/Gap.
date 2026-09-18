@@ -4,10 +4,15 @@ A full-stack learning-gap workspace with a React/TypeScript frontend, an Express
 
 ## Quick start
 
-Requires Node.js 20.19+.
+Requires Node.js 20.19+ and Python 3.11+ for the AI sidecar.
 
 ```sh
 npm install
+cd apps/backend
+python -m venv .venv
+# Windows: .\.venv\Scripts\python.exe -m pip install -r requirements-ai.txt
+# macOS/Linux: .venv/bin/python -m pip install -r requirements-ai.txt
+cd ../..
 npm run dev
 ```
 
@@ -37,7 +42,9 @@ These are deliberately seeded demonstration accounts and sample records. Set DEM
 
 Without model credentials, the backend uses an explicit local teaching engine for the three physics topics. Multiple-choice grading uses an answer key. Short-answer lexical evidence is deliberately held for teacher review, because keywords are not proof of semantic correctness.
 
-To enable model-backed quiz generation, rubric grading and explanations, copy `.env.example` to `.env` and set AI_GATEWAY_API_KEY and AI_GATEWAY_MODEL locally. Never commit or share the key. Restart the server afterward. Model calls use validated JSON, enforce question/score bounds, and report provider failures; they do not silently substitute local content.
+The recommended model path is the private FastAPI sidecar. Keep QuantumBlack credentials in ignored `apps/backend/.env`, then set `AI_SERVICE_URL=http://127.0.0.1:8001` and a random `AI_INTERNAL_TOKEN` of at least 32 characters in the ignored root `.env`. `npm run dev` then starts React, Express and FastAPI together. Never commit or share either file.
+
+The browser never calls FastAPI directly. Express authenticates the user, verifies class membership and supplies trusted course material. FastAPI performs course-scoped retrieval, routing, generation, citation checks and review. Existing assessment/content jobs use the same private sidecar while retaining their durable SQLite workflow and Zod output validation.
 
 The model ID in the example was checked against the live gateway catalog during implementation. You can change it to another supported provider/model ID.
 
@@ -50,6 +57,7 @@ The model ID in the example was checked against the live gateway catalog during 
 - `apps/frontend/src/layouts/`: separate teacher sidebar and student top-bar experiences.
 - `apps/frontend/src/services/`: typed API client and session handling.
 - `apps/backend/src/agents/`: Diagnostic, Assessment, Content, model adapter and validation schemas.
+- `apps/backend/app/ai/`: FastAPI sidecar, orchestrator, Python agents, RAG and QuantumBlack client.
 - `apps/backend/src/jobs.ts`: durable generation queue with restart recovery.
 - `apps/backend/src/app.ts`: validated, role-protected API endpoints.
 - `apps/backend/src/db.ts`: SQLite transactions and atomic on-disk persistence.

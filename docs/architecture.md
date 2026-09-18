@@ -1,42 +1,50 @@
-# Gap architecture
+# Manara architecture
 
 ```mermaid
-flowchart LR
-  T[Teacher React workspace] --> API[Authenticated Express API]
-  S[Student React workspace] --> API
-  API --> DB[(SQLite)]
-  API --> Q[Durable task queue]
-  Q --> A[Assessment Agent]
-  A --> H[Teacher reviews uncertain grades]
-  A --> D[Diagnostic Agent]
-  H --> D
-  D --> C[Content Agent]
-  C --> P[Teacher approves explanation]
-  P --> S
-  S --> R[Follow-up recheck]
-  R --> D
-  A --> M[Optional AI Gateway]
-  C --> M
-  Q --> L[Audit trail]
-  D --> L
+flowchart TB
+  UI[Teacher and student React workspaces] --> API[Authenticated Express API]
+  API --> DB[(SQLite and durable job queue)]
+  API --> AI[Private FastAPI AI service]
+  AI --> RAG[Course-scoped retrieval]
+  AI --> QB[QuantumBlack gateway]
+  DB --> LOOP[Assessment, diagnostic, review and recheck loop]
+  AI --> LOOP
 ```
-
-## Responsibilities
-
-Assessment generates structured questions and rubrics; grades are validated and confidence-gated. Diagnostic clusters published misconception evidence by frequency and severity, tracks per-student outcomes, and exposes teacher signals. Content prepares syllabus-grounded explanations and follow-up questions; distribution requires teacher approval. The model adapter treats syllabus/answer content as untrusted data and validates outputs with Zod.
-
-## Persistence and workflow
-
-Foreign-keyed records represent users, sessions, classes, enrollment, quizzes, submissions, individual learning gaps, interventions, probes, informal questions, tasks and audit events. Schema creation is idempotent. Mutations use SQLite transactions and atomic file replacement. Generation requests are durable queued tasks; interrupted running tasks resume on startup. Generated outputs and successful task state commit together to prevent duplicate outputs after restart.
-
-Low-confidence scores are withheld from student payloads. Approving a grade publishes the results and feeds Diagnostic. Approving an intervention shares it only with affected student gaps. Rechecks update one gap, record an attempt, and recompute class ranking; they never mark the entire class resolved.
-
-Informal questions are persisted and shown to the teacher. The current engine does not infer new misconception labels from free-form questions automatically.
 
 ## Runtime boundaries
 
-React communicates only through authenticated JSON APIs. Credentials and answer keys stay on the backend. Teacher routes verify ownership; student routes verify enrollment and individual gap ownership. Teacher/student navigation is separate; authorization is enforced on the server, not only by hiding UI controls.
+The browser talks only to Express. Express owns sessions, role checks, class membership, teacher ownership, request validation, persistence, durable jobs, answer-key privacy and the public OpenAPI contract. It never accepts a student id, course syllabus or material version from the browser for an AI request; those values come from the authenticated session and SQLite.
 
-The local engine provides deterministic physics examples and conservative rubric signals. Live AI generation/grading requires a gateway API key and a configured model. The live adapter is implemented but cannot be verified without credentials. The single-process SQLite export store is appropriate for this local hackathon build; horizontal scaling requires a shared database and queue.
+FastAPI is a private sidecar bound to a loopback address. Every request requires `X-Manara-AI-Token`. It owns the shared Python `AIService`, course-scoped retrieval, prompt construction, citation verification, deterministic response review and the QuantumBlack client. It has no public CORS surface and no student session logic.
 
-See the workflow integration test for review gating, role isolation, answer-key redaction, approved content distribution, incorrect escalation, individual resolution, persisted results and session invalidation.
+The student Study Assistant follows this path:
+
+1. Express authenticates the student and verifies class membership.
+2. Express reads the current syllabus and `material_version` from SQLite.
+3. FastAPI indexes that trusted text once per course version.
+4. The orchestrator routes the prompt to the Study Agent.
+5. The Study Agent retrieves only that course's chunks, generates an answer and verifies every cited source id.
+6. The reviewer either publishes the grounded answer or returns a safe instructor-review notice.
+7. Express returns only the reviewed content and source metadata to the browser.
+
+The existing TypeScript Assessment and Content agents also use the private FastAPI `/v1/model-json` adapter when it is configured. Their outputs are still validated with Zod and committed through the existing durable queue. The persistent TypeScript Diagnostic service remains the source of truth for dashboard clusters, individual gap status and recheck outcomes.
+
+## Agent responsibilities
+
+| Component        | Job                                                                                | Human control                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Orchestrator     | Classifies a request and sends it to Study, Assessment or Diagnostic               | Denies role-inappropriate requests and asks for clarification when intent is unclear |
+| Study Agent      | Retrieves course evidence, explains a topic and returns verified citations         | Unsafe or unverifiable output is replaced by a review notice                         |
+| Assessment Agent | Drafts grounded quizzes, protects answer keys, grades and emits misconception tags | Low-confidence grades remain hidden until teacher review                             |
+| Diagnostic Agent | Aggregates published evidence, ranks gaps and records follow-up outcomes           | Read-only analysis; teachers act on its signals                                      |
+| Reviewer         | Checks citations, publication safety and grade confidence                          | Queues uncertain work for a teacher instead of publishing it                         |
+
+This is a routed workflow, not a Markov chain. The next action depends on authenticated role, explicit intent, course evidence, confidence and learning state. A probabilistic Markov model would add complexity without improving this deterministic, auditable hackathon loop.
+
+## Persistence and safety
+
+SQLite records users, sessions, classes, enrolment, quizzes, submissions, gaps, interventions, probes, questions, jobs and audit events. Generation jobs survive restarts and commit output with job state atomically. Low-confidence scores are withheld from student payloads. Teacher approval is required before an intervention is shared. A recheck updates only the affected student's gap and feeds the result back to the dashboard.
+
+The Python search index and its review queue are in memory in this P0 build. Express remains the durable source of truth, and a material version change causes safe re-indexing. A production scale-out would replace the in-memory index with a shared vector store and the in-process queue with an external worker queue.
+
+The Python ingestion layer can parse PDF, Word (`.docx`) and PowerPoint (`.pptx`) files. The current browser-to-Express integration indexes the trusted syllabus text already stored for a class; uploading and persisting source files through the teacher UI remains P2 work. Until that path is implemented, do not describe document upload as an end-to-end feature.

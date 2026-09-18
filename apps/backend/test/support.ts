@@ -6,6 +6,7 @@ import { loadConfig, type Config } from "../src/config.js";
 import { openStore, type Store } from "../src/db.js";
 import { createLogger } from "../src/logger.js";
 import { seed } from "../src/seed.js";
+import type { AIServiceClient } from "../src/agents/python-service.js";
 
 export const ALLOWED_ORIGIN = "http://localhost:3000";
 
@@ -47,6 +48,7 @@ function listeningPort(server: Server): number {
 /** Starts the app on a seeded database (in memory unless DATABASE_PATH is given) and a random local port. */
 export async function startTestServer(
   env: Record<string, string> = {},
+  aiService?: AIServiceClient | null,
 ): Promise<TestServer> {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -61,7 +63,12 @@ export async function startTestServer(
       logs.push(JSON.parse(line) as Record<string, unknown>);
     },
   });
-  const app = createApp({ store, config, logger });
+  const app = createApp({
+    store,
+    config,
+    logger,
+    ...(aiService === undefined ? {} : { aiService }),
+  });
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const baseUrl = `http://127.0.0.1:${String(listeningPort(server))}`;

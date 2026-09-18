@@ -11,6 +11,7 @@ export type ErrorCode =
   | "not_found"
   | "conflict"
   | "rate_limited"
+  | "service_unavailable"
   | "internal_error";
 
 /** Shape of every API error response. `error` is safe to show to users. */
@@ -83,5 +84,11 @@ export class PayloadTooLargeError extends HttpError {
 export class RateLimitedError extends HttpError {
   constructor(message: string) {
     super(429, "rate_limited", message);
+  }
+}
+
+export class ServiceUnavailableError extends HttpError {
+  constructor(message: string) {
+    super(503, "service_unavailable", message);
   }
 }

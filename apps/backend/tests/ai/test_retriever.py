@@ -104,3 +104,23 @@ def test_retriever_returns_empty_for_unknown_terms() -> None:
     )
 
     assert results == []
+
+
+def test_retriever_matches_simple_plural_variants() -> None:
+    retriever = InMemoryCourseRetriever()
+
+    retriever.replace_course(
+        "physics-101",
+        create_chunks(
+            "syllabus",
+            "Unit 1 covers Newton's laws.",
+        ),
+    )
+
+    results = retriever.search(
+        "physics-101",
+        "What are the course units?",
+    )
+
+    assert results
+    assert results[0].source.document_id == "syllabus"

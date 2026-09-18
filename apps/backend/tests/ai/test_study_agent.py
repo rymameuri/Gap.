@@ -6,6 +6,7 @@ from app.ai.agents.study_agent import StudyAgent
 from app.ai.schemas.models import (
     AgentName,
     AgentRequest,
+    ChatMessage,
     RetrievedChunk,
     SourceReference,
     UserRole,
@@ -121,6 +122,33 @@ def test_returns_grounded_answer_with_verified_source() -> None:
     prompt = llm_client.calls[0]["messages"][1]["content"]
     assert "Lecture 2: Momentum" in prompt
     assert "page 4" in prompt
+
+
+def test_includes_recent_history_as_untrusted_context() -> None:
+    llm_client = FakeLLMClient(
+        json.dumps(
+            {
+                "answer": "Momentum equals mass times velocity [S1].",
+                "used_source_ids": ["S1"],
+            }
+        )
+    )
+    request = make_request().model_copy(
+        update={
+            "history": [
+                ChatMessage(
+                    role="user",
+                    content="How does mass affect it?",
+                )
+            ]
+        }
+    )
+
+    asyncio.run(StudyAgent(FakeRetriever([make_chunk()]), llm_client).run(request))
+
+    messages = llm_client.calls[0]["messages"]
+    assert "untrusted context" in messages[0]["content"]
+    assert "How does mass affect it?" in messages[1]["content"]
 
 
 def test_invalid_json_requires_human_review() -> None:

@@ -91,6 +91,7 @@ class LLMRouteOutput(BaseModel):
     reason: str = Field(min_length=1, max_length=300)
 
 class DocumentFormat(str, Enum):
+    TEXT = "text"
     PDF = "pdf"
     DOCX = "docx"
     PPTX = "pptx"

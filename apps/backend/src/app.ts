@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import type { Config } from "./config.js";
 import type { Store } from "./db.js";
 import { AgentQueue } from "./jobs.js";
+import {
+  createAIServiceClient,
+  type AIServiceClient,
+} from "./agents/python-service.js";
 import type { Logger } from "./logger.js";
 import { JSON_BODY_LIMIT } from "./constants.js";
 import {
@@ -24,6 +28,8 @@ export interface AppDependencies {
   readonly logger: Logger;
   /** Directory holding the built frontend; served with an index.html fallback when set. */
   readonly webRoot?: string;
+  /** Test seam; production creates this from validated configuration. */
+  readonly aiService?: AIServiceClient | null;
 }
 
 /** Builds the Express app. Routes are documented in apps/backend/openapi.yaml. */
@@ -32,6 +38,7 @@ export function createApp({
   config,
   logger,
   webRoot,
+  aiService,
 }: AppDependencies): express.Express {
   const app = express();
   app.disable("x-powered-by");
@@ -39,7 +46,15 @@ export function createApp({
   // rate limits apply per client and the origin check sees https.
   if (config.trustProxyHops > 0) app.set("trust proxy", config.trustProxyHops);
   else app.use(proxyHeaderWarning(logger));
-  const context = { store, config, queue: new AgentQueue(store, logger) };
+  const context = {
+    store,
+    config,
+    queue: new AgentQueue(store, logger),
+    aiService:
+      aiService === undefined
+        ? createAIServiceClient(config.aiService)
+        : aiService,
+  };
   app.use(requestContext(logger));
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use("/api", noStore, originGuard(config.allowedOrigins));

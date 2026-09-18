@@ -450,6 +450,45 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/student/classes/{id}/assistant:
+    post:
+      operationId: askStudyAssistant
+      tags: [student]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 2000 }
+                history:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [role, content]
+                    properties:
+                      role: { enum: [user, assistant] }
+                      content: { type: string, minLength: 1, maxLength: 10000 }
+      responses:
+        "200":
+          description: A course-grounded answer or a safe review notice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudyAssistantResponse" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /api/student/quizzes/{id}/submit:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -594,6 +633,11 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorBody" }
+    ServiceUnavailable:
+      description: The private AI service is not configured or cannot be reached.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
 
   schemas:
     ErrorBody:
@@ -615,6 +659,7 @@ components:
             - not_found
             - conflict
             - rate_limited
+            - service_unavailable
             - internal_error
 
     Ok:
@@ -1078,6 +1123,29 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ProgressEntry" }
         engine: { $ref: "#/components/schemas/Engine" }
+
+    StudySource:
+      type: object
+      additionalProperties: false
+      required: [documentId, title, page, slide, chunkId]
+      properties:
+        documentId: { type: string }
+        title: { type: string }
+        page: { type: [integer, "null"], minimum: 1 }
+        slide: { type: [integer, "null"], minimum: 1 }
+        chunkId: { type: [string, "null"] }
+
+    StudyAssistantResponse:
+      type: object
+      additionalProperties: false
+      required: [content, sources, grounded, requiresHumanReview]
+      properties:
+        content: { type: string, minLength: 1 }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/StudySource" }
+        grounded: { type: boolean }
+        requiresHumanReview: { type: boolean }
 
     JoinResult:
       type: object

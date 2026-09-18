@@ -105,6 +105,25 @@ def test_indexes_real_word_document(
     )
 
 
+def test_indexes_trusted_plain_text() -> None:
+    service = AIService(llm_client=FakeLLMClient())
+
+    result = service.replace_course_text(
+        course_id="physics-101",
+        document_id="syllabus",
+        title="Physics syllabus",
+        text=(
+            "Momentum is the product of mass and velocity. "
+            "The equation for momentum is p = mv."
+        ),
+    )
+
+    assert result.document_ids == ["syllabus"]
+    assert result.section_count == 1
+    assert result.chunk_count >= 1
+    assert service.course_chunk_count("physics-101") == result.chunk_count
+
+
 def test_runs_grounded_study_workflow(
     tmp_path: Path,
 ) -> None:

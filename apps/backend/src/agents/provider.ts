@@ -1,4 +1,13 @@
 import { z } from "zod";
+import { PythonAIServiceClient } from "./python-service.js";
+
+function pythonServiceConfig() {
+  const { AI_SERVICE_URL, AI_INTERNAL_TOKEN } = process.env;
+  return AI_SERVICE_URL && AI_INTERNAL_TOKEN
+    ? { url: AI_SERVICE_URL, token: AI_INTERNAL_TOKEN }
+    : null;
+}
+
 export function qbCredential() {
   const {
     QB_CLIENT_ID,
@@ -11,6 +20,7 @@ export function qbCredential() {
     : AZURE_OPENAI_API_KEY || QB_GATEWAY_TOKEN;
 }
 export const engineName = () =>
+  pythonServiceConfig() ||
   qbCredential() ||
   (process.env.AI_GATEWAY_API_KEY && process.env.AI_GATEWAY_MODEL)
     ? "live-ai"
@@ -21,6 +31,11 @@ export async function modelJSON<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   if (engineName() !== "live-ai") throw new Error("Live AI is not configured");
+  const pythonConfig = pythonServiceConfig();
+  if (pythonConfig !== null) {
+    const client = new PythonAIServiceClient(pythonConfig);
+    return schema.parse(await client.modelJSON(instructions, data));
+  }
   const credential = qbCredential();
   const model = credential
     ? process.env.QB_GATEWAY_MODEL || "gpt-5.4-2026-03-05"

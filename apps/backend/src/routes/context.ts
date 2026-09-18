@@ -2,11 +2,13 @@ import type { Request } from "express";
 import type { Config } from "../config.js";
 import type { Store } from "../db.js";
 import type { AgentQueue } from "../jobs.js";
+import type { AIServiceClient } from "../agents/python-service.js";
 
 export interface RouteContext {
   readonly store: Store;
   readonly config: Config;
   readonly queue: AgentQueue;
+  readonly aiService: AIServiceClient | null;
 }
 
 /** Route parameter that Express guarantees for the matched path. */

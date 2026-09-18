@@ -13,7 +13,22 @@ _TOKEN_PATTERN = re.compile(r"\b\w+\b", re.UNICODE)
 
 
 def _tokenise(text: str) -> list[str]:
-    return _TOKEN_PATTERN.findall(text.casefold())
+    tokens: list[str] = []
+
+    for token in _TOKEN_PATTERN.findall(text.casefold()):
+        tokens.append(token)
+
+        # Keep the original token and add a conservative singular variant.
+        # This lets natural queries such as "three units" match material
+        # containing "Unit 1" without requiring an external stemmer.
+        if (
+            len(token) > 3
+            and token.endswith("s")
+            and not token.endswith(("ss", "is", "us"))
+        ):
+            tokens.append(token[:-1])
+
+    return tokens
 
 
 @dataclass

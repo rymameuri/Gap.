@@ -8,6 +8,7 @@ import {
   stringField,
 } from "../test/openapi.js";
 import { startTestServer, type TestServer } from "../test/support.js";
+import type { AIServiceClient } from "./agents/python-service.js";
 
 // The contract runs against the local engine. src/agents reads these directly
 // and treats empty values as unset.
@@ -18,6 +19,8 @@ for (const key of [
   "QB_GATEWAY_TOKEN",
   "AI_GATEWAY_API_KEY",
   "AI_GATEWAY_MODEL",
+  "AI_SERVICE_URL",
+  "AI_INTERNAL_TOKEN",
 ])
   process.env[key] = "";
 
@@ -33,6 +36,28 @@ const SEED_APPROVED_INTERVENTION = "welcome-explainer";
 const MISSING = "does-not-exist";
 const JOB_POLL_ATTEMPTS = 50;
 const JOB_POLL_INTERVAL_MS = 20;
+
+const contractAI: AIServiceClient = {
+  study() {
+    return Promise.resolve({
+      content: "A net force changes an object's velocity [S1].",
+      sources: [
+        {
+          documentId: "syllabus",
+          title: "Introduction to Physics syllabus",
+          page: null,
+          slide: null,
+          chunkId: "physics-1",
+        },
+      ],
+      grounded: true,
+      requiresHumanReview: false,
+    });
+  },
+  modelJSON(): Promise<unknown> {
+    return Promise.resolve({});
+  },
+};
 
 interface Question {
   id: string;
@@ -112,7 +137,7 @@ describe("API contract", () => {
   }
 
   before(async () => {
-    app = await startTestServer();
+    app = await startTestServer({}, contractAI);
     teacher = await app.login(TEACHER);
     sara = await app.login(SARA);
     omar = await app.login(OMAR);
@@ -281,6 +306,63 @@ describe("API contract", () => {
         `/api/student/workspace?classId=${MISSING}`,
         { cookie: sara },
       );
+    });
+  });
+
+  describe("study assistant", () => {
+    const operation = "POST /api/student/classes/{id}/assistant";
+
+    test("answers from a joined course and validates safe failure cases", async () => {
+      const path = `/api/student/classes/${SEED_CLASS}/assistant`;
+      const response = await call(operation, path, {
+        cookie: sara,
+        body: { message: "Explain net force" },
+      });
+      assert.equal((response as { grounded: boolean }).grounded, true);
+
+      await call(operation, path, {
+        cookie: sara,
+        body: { message: "" },
+      });
+      await call(operation, `/api/student/classes/${MISSING}/assistant`, {
+        cookie: sara,
+        body: { message: "Explain net force" },
+      });
+
+      const course = app.store.one<{ syllabus: string }>(
+        "SELECT syllabus FROM classes WHERE id=?",
+        [SEED_CLASS],
+      );
+      assert.ok(course);
+      app.store.run("UPDATE classes SET syllabus='' WHERE id=?", [SEED_CLASS]);
+      try {
+        await call(operation, path, {
+          cookie: sara,
+          body: { message: "Explain net force" },
+        });
+      } finally {
+        app.store.run("UPDATE classes SET syllabus=? WHERE id=?", [
+          course.syllabus,
+          SEED_CLASS,
+        ]);
+      }
+    });
+
+    test("documents an unavailable AI sidecar", async () => {
+      const server = await startTestServer({}, null);
+      try {
+        const cookie = await server.login(SARA);
+        contract.check(
+          operation,
+          await server.request(`/api/student/classes/${SEED_CLASS}/assistant`, {
+            method: "POST",
+            cookie,
+            body: { message: "Explain net force" },
+          }),
+        );
+      } finally {
+        await server.close();
+      }
     });
   });
 
