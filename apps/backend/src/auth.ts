@@ -63,6 +63,7 @@ export function deleteSession(store: Store, token: string): void {
   store.run("DELETE FROM sessions WHERE token_hash=?", [tokenHash(token)]);
 }
 
+/** Starts a session for `userId` and sets its cookie. Expired sessions of every user are deleted first. */
 export function setSession(
   store: Store,
   response: Response,
@@ -70,11 +71,15 @@ export function setSession(
   secureCookie: boolean,
 ): void {
   const token = randomBytes(SESSION_TOKEN_BYTES).toString("hex");
-  store.run("INSERT INTO sessions VALUES(?,?,?)", [
-    tokenHash(token),
-    userId,
-    Date.now() + SESSION_TTL_MS,
-  ]);
+  const now = Date.now();
+  store.transaction(() => {
+    store.run("DELETE FROM sessions WHERE expires_at<=?", [now]);
+    store.run("INSERT INTO sessions VALUES(?,?,?)", [
+      tokenHash(token),
+      userId,
+      now + SESSION_TTL_MS,
+    ]);
+  });
   response.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
