@@ -17,7 +17,6 @@ import {
   findStudentIdByEmail,
   insertClass,
   isMember,
-  setJoinCode,
   studentClassCards,
   teacherClassCards,
   updateClassMaterials,
@@ -48,14 +47,9 @@ export function classCards(
   userId: string,
   role: "teacher" | "student",
 ): (TeacherClassCard | StudentClassCard)[] {
-  if (role === "student") return studentClassCards(store, userId);
-  const cards = teacherClassCards(store, userId);
-  for (const card of cards)
-    if (!card.join_code) {
-      card.join_code = classCode(store);
-      setJoinCode(store, card.id, card.join_code);
-    }
-  return cards;
+  return role === "student"
+    ? studentClassCards(store, userId)
+    : teacherClassCards(store, userId);
 }
 
 /** @throws ZodError for an invalid body. */

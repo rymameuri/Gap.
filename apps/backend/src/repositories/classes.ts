@@ -125,10 +125,6 @@ export function updateClassMaterials(
   );
 }
 
-export function setJoinCode(store: Store, id: string, code: string): void {
-  store.run("UPDATE classes SET join_code=? WHERE id=?", [code, id]);
-}
-
 /** Enrolls a student; enrolling twice is a no-op. */
 export function enrollStudent(
   store: Store,
