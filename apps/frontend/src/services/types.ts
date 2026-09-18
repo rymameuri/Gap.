@@ -139,3 +139,18 @@ export type StudentData = {
   }[];
   engine: string;
 };
+
+export type StudySource = {
+  documentId: string;
+  title: string;
+  page: number | null;
+  slide: number | null;
+  chunkId: string | null;
+};
+
+export type StudyAssistantResponse = {
+  content: string;
+  sources: StudySource[];
+  grounded: boolean;
+  requiresHumanReview: boolean;
+};

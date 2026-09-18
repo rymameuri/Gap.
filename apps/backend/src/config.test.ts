@@ -24,6 +24,7 @@ describe("loadConfig", () => {
       secureCookies: false,
       trustProxyHops: 0,
       allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+      aiService: null,
     });
   });
 
@@ -98,5 +99,28 @@ describe("loadConfig", () => {
 
   test("rejects non-integer ports", () => {
     assert.equal(issuesOf({ API_PORT: "30.5" }).length, 1);
+  });
+
+  test("reads paired internal AI service configuration", () => {
+    const config = loadConfig({
+      AI_SERVICE_URL: "http://127.0.0.1:8001",
+      AI_INTERNAL_TOKEN: "a-secure-internal-token-with-32-characters",
+    });
+    assert.deepEqual(config.aiService, {
+      url: "http://127.0.0.1:8001",
+      token: "a-secure-internal-token-with-32-characters",
+    });
+  });
+
+  test("requires the AI service URL and token together", () => {
+    assert.deepEqual(issuesOf({ AI_SERVICE_URL: "http://127.0.0.1:8001" }), [
+      "AI_INTERNAL_TOKEN is required when AI_SERVICE_URL is set",
+    ]);
+    assert.deepEqual(
+      issuesOf({
+        AI_INTERNAL_TOKEN: "a-secure-internal-token-with-32-characters",
+      }),
+      ["AI_SERVICE_URL is required when AI_INTERNAL_TOKEN is set"],
+    );
   });
 });

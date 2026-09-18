@@ -259,7 +259,7 @@ describe("persistence", () => {
 
 test("data/schema.sql matches the migrations", async () => {
   assert.equal(
-    await readFile(SCHEMA_SNAPSHOT_FILE, "utf8"),
+    (await readFile(SCHEMA_SNAPSHOT_FILE, "utf8")).replaceAll("\r\n", "\n"),
     await renderSchemaSnapshot(),
     "data/schema.sql is stale; run `npm run db -- schema`",
   );

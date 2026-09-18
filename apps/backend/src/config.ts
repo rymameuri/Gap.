@@ -17,6 +17,11 @@ const LOG_LEVELS = [
 export type LogLevel = (typeof LOG_LEVELS)[number];
 export type Environment = "development" | "test" | "production";
 
+export interface AIServiceConfig {
+  readonly url: string;
+  readonly token: string;
+}
+
 export interface Config {
   readonly environment: Environment;
   readonly host: string;
@@ -29,6 +34,8 @@ export interface Config {
   readonly trustProxyHops: number;
   /** Origins allowed to send state-changing requests, besides the API's own host. */
   readonly allowedOrigins: readonly string[];
+  /** Private Python AI sidecar. Both values are required when enabled. */
+  readonly aiService: AIServiceConfig | null;
 }
 
 const port = z.coerce.number().int().min(1).max(65535);
@@ -53,6 +60,8 @@ const envSchema = z
     DEMO_PASSWORD: z.string().min(8).max(128).optional(),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
     TRUST_PROXY: z.coerce.number().int().min(0).max(MAX_PROXY_HOPS).default(0),
+    AI_SERVICE_URL: z.string().url().optional(),
+    AI_INTERNAL_TOKEN: z.string().min(32).max(512).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production" && env.DEMO_PASSWORD === undefined)
@@ -60,6 +69,18 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ["DEMO_PASSWORD"],
         message: "is required in production",
+      });
+    if (env.AI_SERVICE_URL !== undefined && env.AI_INTERNAL_TOKEN === undefined)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AI_INTERNAL_TOKEN"],
+        message: "is required when AI_SERVICE_URL is set",
+      });
+    if (env.AI_INTERNAL_TOKEN !== undefined && env.AI_SERVICE_URL === undefined)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AI_SERVICE_URL"],
+        message: "is required when AI_INTERNAL_TOKEN is set",
       });
   });
 
@@ -115,5 +136,13 @@ export function loadConfig(
       values.APP_ORIGIN === undefined
         ? webOrigins
         : [values.APP_ORIGIN, ...webOrigins],
+    aiService:
+      values.AI_SERVICE_URL === undefined ||
+      values.AI_INTERNAL_TOKEN === undefined
+        ? null
+        : {
+            url: values.AI_SERVICE_URL,
+            token: values.AI_INTERNAL_TOKEN,
+          },
   };
 }

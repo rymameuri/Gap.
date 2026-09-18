@@ -15,6 +15,7 @@ Express + TypeScript with persistent SQLite, authenticated APIs, a durable gener
 | `src/migrations/`     | Schema migrations                                                               |
 | `src/jobs.ts`         | Queue for agent generation tasks                                                |
 | `src/agents/`         | Agent logic, owned by the agents team                                           |
+| `app/ai/`             | Private FastAPI AI sidecar, Python agents, RAG and model client                 |
 
 Services parse request bodies at the same step as before the split, so ownership and state checks still answer before body validation. The backend compiles with `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
 
@@ -22,17 +23,19 @@ Services parse request bodies at the same step as before the split, so ownership
 
 The server reads environment variables once at startup through `loadConfig` in `src/config.ts` and exits with a single `invalid configuration` log line listing every problem. Empty values count as unset. Only `src/index.ts` reads `process.env`; ESLint enforces this outside `src/agents`.
 
-| Variable        | Default                           | Notes                                                                 |
-| --------------- | --------------------------------- | --------------------------------------------------------------------- |
-| `NODE_ENV`      | `development`                     | `development`, `test` or `production`. Production sets secure cookies |
-| `API_HOST`      | `127.0.0.1`                       |                                                                       |
-| `API_PORT`      | `3001`                            |                                                                       |
-| `WEB_PORT`      | `3000`                            | Frontend dev port; its localhost origins may send writes              |
-| `APP_ORIGIN`    | unset                             | Extra allowed origin, for example `https://app.example.com`           |
-| `DATABASE_PATH` | `.runtime/gap.sqlite`             |                                                                       |
-| `DEMO_PASSWORD` | `GapDemo!2026` outside production | Required in production. Minimum 8 characters                          |
-| `LOG_LEVEL`     | `info`                            | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`        |
-| `TRUST_PROXY`   | `0`                               | Number of reverse proxies in front of the app, 0 to 10                |
+| Variable            | Default                           | Notes                                                                 |
+| ------------------- | --------------------------------- | --------------------------------------------------------------------- |
+| `NODE_ENV`          | `development`                     | `development`, `test` or `production`. Production sets secure cookies |
+| `API_HOST`          | `127.0.0.1`                       |                                                                       |
+| `API_PORT`          | `3001`                            |                                                                       |
+| `WEB_PORT`          | `3000`                            | Frontend dev port; its localhost origins may send writes              |
+| `APP_ORIGIN`        | unset                             | Extra allowed origin, for example `https://app.example.com`           |
+| `DATABASE_PATH`     | `.runtime/gap.sqlite`             |                                                                       |
+| `DEMO_PASSWORD`     | `GapDemo!2026` outside production | Required in production. Minimum 8 characters                          |
+| `LOG_LEVEL`         | `info`                            | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`        |
+| `TRUST_PROXY`       | `0`                               | Number of reverse proxies in front of the app, 0 to 10                |
+| `AI_SERVICE_URL`    | unset                             | Private FastAPI base URL, normally `http://127.0.0.1:8001`            |
+| `AI_INTERNAL_TOKEN` | unset                             | Shared bridge token, at least 32 characters; must be set with the URL |
 
 The model provider variables in `.env.example` are read by `src/agents` and documented there by the agents team.
 
@@ -85,6 +88,7 @@ Every API error response has the same body:
 | 413    | `payload_too_large`                                |
 | 429    | `rate_limited`                                     |
 | 500    | `internal_error`                                   |
+| 503    | `service_unavailable`                              |
 
 Routes throw the typed errors in `src/errors.ts`; `errorHandler` in `src/http/middleware.ts` turns them into responses. Any other error returns a generic 500 and is logged with its stack, so internal details never reach the client.
 
@@ -98,8 +102,16 @@ Logs are JSON lines on stdout (pino). Each request gets an id, returned in the `
 
 ```sh
 npm ci
+cd apps/backend
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements-ai.txt
+cd ../..
 npm run dev
 ```
+
+On Windows, use `.\.venv\Scripts\python.exe` instead of `.venv/bin/python`.
+
+When `AI_SERVICE_URL` and `AI_INTERNAL_TOKEN` are both configured, the development launcher also starts Uvicorn from `apps/backend/.venv`. QuantumBlack credentials stay in ignored `apps/backend/.env`; the bridge token stays in the ignored root `.env`.
 
 The frontend runs on `WEB_PORT` (3000) and proxies `/api` to the backend on `API_PORT` (3001). On start the backend applies pending migrations and, when the database has no users, seeds the demo course and accounts.
 

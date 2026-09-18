@@ -11,6 +11,8 @@ for (const key of [
   "QB_GATEWAY_TOKEN",
   "AI_GATEWAY_API_KEY",
   "AI_GATEWAY_MODEL",
+  "AI_SERVICE_URL",
+  "AI_INTERNAL_TOKEN",
 ])
   process.env[key] = "";
 

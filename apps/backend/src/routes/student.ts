@@ -6,11 +6,12 @@ import { submitQuiz } from "../services/assessments.js";
 import { joinClass } from "../services/classes.js";
 import { askQuestion, recheckGap } from "../services/learning.js";
 import { studentWorkspace } from "../services/workspaces.js";
+import { askStudyAssistant } from "../services/study-assistant.js";
 import { param, queryString, type RouteContext } from "./context.js";
 
 export function registerStudentRoutes(
   app: Express,
-  { store }: RouteContext,
+  { store, aiService }: RouteContext,
 ): void {
   app.post(
     "/api/student/classes/join",
@@ -25,6 +26,22 @@ export function registerStudentRoutes(
   app.get("/api/student/workspace", studentOnly, (req, res) => {
     res.json(studentWorkspace(store, req.user.id, queryString(req, "classId")));
   });
+
+  app.post(
+    "/api/student/classes/:id/assistant",
+    studentOnly,
+    asyncRoute(async (req, res) => {
+      res.json(
+        await askStudyAssistant(
+          store,
+          aiService,
+          req.user.id,
+          param(req, "id"),
+          req.body,
+        ),
+      );
+    }),
+  );
 
   app.post(
     "/api/student/quizzes/:id/submit",

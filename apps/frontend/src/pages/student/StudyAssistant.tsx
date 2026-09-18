@@ -16,6 +16,7 @@ import {
 import { useCourse } from "../../layouts/StudentLayout";
 import { ErrorBox, useNotice } from "../../components/ui";
 import { post } from "../../services/api";
+import type { StudyAssistantResponse } from "../../services/types";
 import { courseTopics, errorMessage } from "./course-model";
 import { useStudyDrafts, type StudyDraft } from "./useStudyDrafts";
 import { MaterialReader } from "./components/MaterialReader";
@@ -88,6 +89,11 @@ export function StudyAssistant() {
   const [topic, setTopic] = useState(current?.topic || "");
   const [material, setMaterial] = useState("syllabus");
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [turns, setTurns] = useState<
+    { question: string; response: StudyAssistantResponse }[]
+  >([]);
+  const [busy, setBusy] = useState(false);
+  const [assistantError, setAssistantError] = useState("");
   const notice = useNotice();
   const topics = courseTopics(gaps, quizzes);
   // Switching drafts intentionally replaces the editor; background course refreshes do not.
@@ -97,19 +103,47 @@ export function StudyAssistant() {
     setMode(
       current?.mode || (params.get("mode") === "topic" ? "topic" : "question"),
     );
+    setTurns([]);
+    setAssistantError("");
   }, [draftId, current?.id, params.get("mode")]);
   const dirty =
     text !== (current?.text || "") ||
     mode !== (current?.mode || "question") ||
     topic !== (current?.topic || "");
-  const save = () => {
+  const save = (announce = true) => {
     if (!text.trim()) return;
     const draft = saveDraft({ text: text.trim(), topic, mode }, current?.id);
     if (draft) {
       setParams({ draft: draft.id }, { replace: true });
-      notice("Draft saved in this browser.");
+      if (announce) notice("Draft saved in this browser.");
     }
   };
+  async function askAssistant(event: FormEvent) {
+    event.preventDefault();
+    const question = text.trim();
+    if (!question || busy) return;
+    setBusy(true);
+    setAssistantError("");
+    try {
+      const response = await post<StudyAssistantResponse>(
+        `/student/classes/${course.id}/assistant`,
+        {
+          message: question,
+          history: turns.slice(-10).flatMap((turn) => [
+            { role: "user", content: turn.question },
+            { role: "assistant", content: turn.response.content },
+          ]),
+        },
+      );
+      setTurns((currentTurns) => [...currentTurns, { question, response }]);
+      setText("");
+      if (response.sources.length > 0) setSourcesOpen(true);
+    } catch (error) {
+      setAssistantError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
   function switchDraft(id: string) {
     if (
       dirty &&
@@ -169,13 +203,44 @@ export function StudyAssistant() {
           </select>
           <span className="s-availability">
             <span />
-            AI not connected
+            Course-grounded AI
           </span>
         </div>
 
         <div className="s-thread">
           <div className="s-thread-content">
-            {current ? (
+            {turns.length > 0 ? (
+              <div className="s-assistant-turns" aria-live="polite">
+                {turns.map((turn, index) => (
+                  <div className="s-assistant-turn" key={index}>
+                    <div className="s-draft-message">
+                      <span className="s-avatar" aria-hidden="true">
+                        You
+                      </span>
+                      <div>
+                        <span className="s-kicker">Your question</span>
+                        <p>{turn.question}</p>
+                      </div>
+                    </div>
+                    <div className="s-assistant-message">
+                      <span className="s-assistant-symbol" aria-hidden="true">
+                        <Sparkles size={20} />
+                      </span>
+                      <div>
+                        <span className="s-kicker">Study Assistant</span>
+                        <p>{turn.response.content}</p>
+                        {turn.response.requiresHumanReview && (
+                          <p className="s-assistant-review-note">
+                            Your instructor needs to review this request before
+                            an explanation can be shared.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : current ? (
               <div className="s-draft-message">
                 <span className="s-avatar" aria-hidden="true">
                   You
@@ -219,13 +284,7 @@ export function StudyAssistant() {
             )}
           </div>
 
-          <form
-            className="s-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              save();
-            }}
-          >
+          <form className="s-composer" onSubmit={askAssistant}>
             <div className="s-mode-control" aria-label="Study mode">
               <button
                 type="button"
@@ -272,28 +331,39 @@ export function StudyAssistant() {
                 maxLength={2000}
                 required
                 value={text}
+                disabled={busy}
                 onChange={(event) => setText(event.target.value)}
                 placeholder="Message Study Assistant..."
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    if (text.trim()) save();
+                    if (text.trim()) event.currentTarget.form?.requestSubmit();
                   }
                 }}
               />
               <button
                 className="s-composer-submit"
-                title="Save draft"
-                aria-label="Save draft"
-                disabled={!text.trim()}
+                title="Ask Study Assistant"
+                aria-label="Ask Study Assistant"
+                disabled={!text.trim() || busy}
               >
-                <Bookmark size={18} />
+                <Send size={18} />
               </button>
             </div>
             <p className="s-composer-note">
-              AI replies are not connected yet. Enter saves a private draft;
-              Shift+Enter adds a new line.
+              Answers use your course material and show their sources. Enter
+              sends; Shift+Enter adds a new line.
             </p>
+            <button
+              className="s-save-draft"
+              type="button"
+              disabled={!text.trim() || busy}
+              onClick={() => save()}
+            >
+              <Bookmark size={15} />
+              Save draft
+            </button>
+            {assistantError && <ErrorBox message={assistantError} />}
             {storageError && <ErrorBox message={storageError} />}
           </form>
           <InstructorQuestion courseId={course.id} />
@@ -320,9 +390,24 @@ export function StudyAssistant() {
           <div className="s-sources-note">
             <FileText size={16} />
             <span>
-              These are the materials future assistant responses should cite.
+              Assistant answers are limited to these approved course materials.
             </span>
           </div>
+          {turns.at(-1)?.response.sources.length ? (
+            <div className="s-cited-sources">
+              <span className="s-kicker">Cited in the latest answer</span>
+              {turns.at(-1)?.response.sources.map((source) => (
+                <div key={source.chunkId || source.documentId}>
+                  <FileText size={16} aria-hidden="true" />
+                  <span>
+                    <strong>{source.title}</strong>
+                    {source.page ? ` · page ${source.page}` : ""}
+                    {source.slide ? ` · slide ${source.slide}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <MaterialReader
             course={course}
             gaps={gaps}

@@ -51,3 +51,16 @@ export const questionBody = z.object({
   classId: z.string(),
   text: z.string().min(5).max(2000),
 });
+
+export const studyAssistantBody = z.object({
+  message: z.string().trim().min(1).max(2000),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(10_000),
+      }),
+    )
+    .max(20)
+    .default([]),
+});
