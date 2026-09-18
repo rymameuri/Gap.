@@ -2,6 +2,7 @@ import "dotenv/config";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { openStore } from "./db.js";
+import { MigrationError, migrate } from "./migrate.js";
 import { seed } from "./seed.js";
 import { createApp } from "./app.js";
 import { ConfigError, loadConfig, type Config } from "./config.js";
@@ -36,7 +37,15 @@ process.on("uncaughtException", (error) => {
   process.exit(1);
 });
 
-const store = await openStore(config.databasePath);
+const store = await openStore(config.databasePath, { migrate: false });
+try {
+  const { adopted, applied } = migrate(store);
+  logger.info({ adopted, applied }, "database migrated");
+} catch (error) {
+  if (!(error instanceof MigrationError)) throw error;
+  logger.fatal({ err: error }, "database migration refused");
+  process.exit(1);
+}
 seed(store, config.demoPassword);
 const app = createApp({
   store,

@@ -9,6 +9,7 @@ import {
 import { dirname, resolve } from "node:path";
 import { randomUUID, scryptSync, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
+import { migrate } from "./migrate.js";
 const require = createRequire(import.meta.url);
 export type Row = Record<string, any>;
 export class Store {
@@ -81,7 +82,20 @@ export class Store {
     ]);
   }
 }
-export async function openStore(path: string) {
+export interface OpenStoreOptions {
+  /** Apply pending migrations before returning. Defaults to true. */
+  readonly migrate?: boolean;
+}
+
+/**
+ * Opens the SQLite database at `path` (":memory:" for a throwaway one),
+ * creating the file on first save.
+ * @throws MigrationError when the database is ahead of or diverges from this code.
+ */
+export async function openStore(
+  path: string,
+  options: OpenStoreOptions = {},
+): Promise<Store> {
   const SQL = await initSqlJs({
     locateFile: (file) => require.resolve("sql.js/dist/" + file),
   });
@@ -92,40 +106,11 @@ export async function openStore(path: string) {
       : undefined,
   );
   db.run("PRAGMA foreign_keys=ON;");
-  db.run(readFileSync(resolve("data/schema.sql"), "utf8"));
   const store = new Store(db, actual);
-  if (
-    !store
-      .all("PRAGMA table_info(classes)")
-      .some((column) => column.name === "join_code")
-  )
-    store.run("ALTER TABLE classes ADD COLUMN join_code TEXT");
-  store.run(
-    "CREATE UNIQUE INDEX IF NOT EXISTS classes_join_code ON classes(join_code)",
-  );
-  for (const course of store.all(
-    "SELECT id FROM classes WHERE join_code IS NULL",
-  ))
-    store.run("UPDATE classes SET join_code=? WHERE id=?", [
-      classCode(store),
-      course.id,
-    ]);
-  store.save();
+  if (options.migrate ?? true) migrate(store);
   return store;
 }
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return salt + ":" + scryptSync(password, salt, 64).toString("hex");
-}
-
-export function classCode(store: Store): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  for (;;) {
-    const code = Array.from(
-      randomBytes(8),
-      (value) => alphabet[value % alphabet.length],
-    ).join("");
-    if (!store.one("SELECT id FROM classes WHERE join_code=?", [code]))
-      return code;
-  }
 }

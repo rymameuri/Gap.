@@ -44,7 +44,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/backend/src/index.ts"],
+    files: ["apps/backend/src/index.ts", "apps/backend/src/migrate-cli.ts"],
     rules: { "no-restricted-properties": "off" },
   },
   {
