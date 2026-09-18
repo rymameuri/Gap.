@@ -1,0 +1,3 @@
+#!/bin/sh
+# Checks the message only when the commit touches backend-owned files.
+exec node --import tsx apps/backend/tools/check-forbidden.ts --commit-msg "$1"

@@ -5,7 +5,7 @@ export const initialTopics = [
   {
     title: "Force and motion",
     tag: "Constant motion needs a constant force",
-    section: "Unit 1 · Newton’s laws",
+    section: "Unit 1 - Newton's laws",
     explanation:
       "An object keeps moving at a constant velocity when the net force is zero. A force changes its velocity; it does not maintain it. Think of a puck gliding on frictionless ice: it keeps moving without being pushed. On a rough surface, a push is needed to balance friction.",
     question:
@@ -29,10 +29,10 @@ export const initialTopics = [
   {
     title: "Energy and work",
     tag: "Energy disappears when an object stops",
-    section: "Unit 2 · Conservation of energy",
+    section: "Unit 2 - Conservation of energy",
     explanation:
       "Energy changes form; it does not disappear. When a bicycle brakes, kinetic energy becomes thermal energy in the brakes and surroundings. The bicycle loses kinetic energy, but the total energy is conserved.",
-    question: "When a bicycle brakes, its kinetic energy mainly becomes…",
+    question: "When a bicycle brakes, its kinetic energy mainly becomes...",
     options: ["Nothing", "Thermal energy", "Extra mass"],
     answer: 1,
     keywords: ["energy", "thermal", "heat", "conserved"],
@@ -48,10 +48,10 @@ export const initialTopics = [
   {
     title: "Electric circuits",
     tag: "Current gets used up by a bulb",
-    section: "Unit 3 · Series circuits",
+    section: "Unit 3 - Series circuits",
     explanation:
       "In a steady series circuit, the same current passes through every component. A bulb transfers electrical energy into light and heat. Charge flows around the circuit rather than being consumed.",
-    question: "In a series circuit, the current before and after a bulb is…",
+    question: "In a series circuit, the current before and after a bulb is...",
     options: ["Lower after the bulb", "Higher after the bulb", "The same"],
     answer: 2,
     keywords: ["current", "same", "charge", "energy"],
@@ -127,7 +127,7 @@ export function seed(store: Store) {
         "physics",
         "teacher",
         "Introduction to Physics",
-        "Unit 1: Forces and motion - Newton’s laws\nUnit 2: Energy and work - Conservation of energy\nUnit 3: Electric circuits - Series circuits",
+        "Unit 1: Forces and motion - Newton's laws\nUnit 2: Energy and work - Conservation of energy\nUnit 3: Electric circuits - Series circuits",
         1,
       ],
     );
@@ -146,7 +146,7 @@ export function seed(store: Store) {
           topic.section,
           "open",
           index === 0 ? 3 : 2,
-          "Quiz 1 · Question " + (index + 1),
+          "Quiz 1 - Question " + (index + 1),
           null,
           now,
         ]);
@@ -219,7 +219,7 @@ export function seed(store: Store) {
     store.run("INSERT INTO quizzes VALUES(?,?,?,?,?,?,?)", [
       "quiz-1",
       "physics",
-      "Energy and work · Quiz 1",
+      "Energy and work - Quiz 1",
       JSON.stringify(questions),
       "published",
       "local",
@@ -247,14 +247,14 @@ export function seed(store: Store) {
           confidence: 0.62,
           tag: e.tag,
           reason:
-            "“Lost” may refer to transfer to the surroundings. Teacher judgment is needed.",
+            '"Lost" may refer to transfer to the surroundings. Teacher judgment is needed.',
         },
       ]),
       1,
       4,
       0.62,
       "pending",
-      "Ambiguous use of “lost”; teacher review required.",
+      'Ambiguous use of "lost"; teacher review required.',
       now,
     ]);
     store.event("physics", "Diagnostic", "Sample evidence analysed", {

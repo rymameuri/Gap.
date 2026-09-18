@@ -18,7 +18,7 @@ const server = app.listen(port, process.env.API_HOST || "127.0.0.1", () =>
   console.log(
     "Gap API ready on port " +
       port +
-      " · persistent SQLite · " +
+      ", persistent SQLite, " +
       (engineName() === "live-ai" ? "live AI" : "local teaching engine"),
   ),
 );

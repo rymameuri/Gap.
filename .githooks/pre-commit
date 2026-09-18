@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks commits that add forbidden characters or phrases to backend-owned files.
+exec node --import tsx apps/backend/tools/check-forbidden.ts --staged
