@@ -18,6 +18,12 @@ const DATABASE_FILE_MODE = 0o600;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_KEY_LENGTH = 64;
 
+// sql.js resets connection pragmas when it exports the database, so this runs
+// on open and after every save.
+function enforceForeignKeys(db: Database): void {
+  db.run("PRAGMA foreign_keys=ON;");
+}
+
 // Default row type for callers that do not declare their columns. Only
 // src/agents relies on it (owned by the agents team); backend code passes an
 // explicit row type. It stays `any` because agent code reads columns by name
@@ -87,6 +93,7 @@ export class Store {
     mkdirSync(dirname(this.path), { recursive: true });
     const temp = this.path + ".tmp";
     writeFileSync(temp, this.db.export(), { mode: DATABASE_FILE_MODE });
+    enforceForeignKeys(this.db);
     renameSync(temp, this.path);
   }
 
@@ -133,7 +140,7 @@ export async function openStore(
   const db = new SQL.Database(
     actual !== MEMORY && existsSync(actual) ? readFileSync(actual) : undefined,
   );
-  db.run("PRAGMA foreign_keys=ON;");
+  enforceForeignKeys(db);
   const store = new Store(db, actual);
   if (options.migrate ?? true) migrate(store);
   return store;
