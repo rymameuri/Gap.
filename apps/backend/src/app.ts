@@ -549,11 +549,9 @@ export function createApp(store: Store) {
         [code],
       );
       if (!course) {
-        res
-          .status(404)
-          .json({
-            error: "That class code was not found. Check it with your teacher.",
-          });
+        res.status(404).json({
+          error: "That class code was not found. Check it with your teacher.",
+        });
         return;
       }
       const existing = store.one(
