@@ -1,3 +1,13 @@
+import { LearningCharts } from "../../components/LearningCharts";
+import {
+  Users,
+  Layers,
+  CheckCircle2,
+  ClipboardCheck,
+  ArrowUpRight,
+  MessageSquare,
+  ArrowRight,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { ClassLink as Link } from "../../components/ClassLink";
 import { useTeacher } from "../../layouts/workspace";
@@ -31,62 +41,149 @@ function useAction() {
 }
 export function Overview() {
   const { data } = useTeacher();
+  const priority = data.clusters[0];
+  const resolved = data.gaps.filter((g) => g.status === "resolved").length;
+  const metrics = [
+    {
+      label: "Students",
+      value: data.roster.length,
+      detail: "Enrolled in this class",
+      Icon: Users,
+      tone: "neutral",
+      to: "/teacher/students",
+    },
+    {
+      label: "Learning gaps",
+      value: data.clusters.length,
+      detail: "Topics needing support",
+      Icon: Layers,
+      tone: "lavender",
+      to: "/teacher/gaps?status=open",
+    },
+    {
+      label: "Resolved",
+      value: resolved,
+      detail: "Verified learning outcomes",
+      Icon: CheckCircle2,
+      tone: "sage",
+      to: "/teacher/gaps?status=resolved",
+    },
+    {
+      label: "Awaiting review",
+      value: data.reviews.length,
+      detail: "Responses to check",
+      Icon: ClipboardCheck,
+      tone: "sand",
+      to: "/teacher/review",
+    },
+  ];
   return (
-    <>
-      <Title
-        label="YOUR CLASS"
-        heading="A clearer picture of learning."
-        description="See where your class is stuck, and what to do next."
-        action={
-          <Link className="btn primary" to="/teacher/assessments">
-            Create assessment
-          </Link>
-        }
-      />
-      <div className="stats">
-        {[
-          ["Students", data.roster.length, "Enrolled in this class"],
-          [
-            "Open learning gaps",
-            data.clusters.length,
-            "Misconception clusters",
-          ],
-          [
-            "Gaps resolved",
-            data.gaps.filter((g) => g.status === "resolved").length,
-            "Verified student-topic outcomes",
-          ],
-          [
-            "Awaiting review",
-            data.reviews.length,
-            "Grades that need your judgment",
-          ],
-        ].map(([label, value, detail]) => (
-          <div className="stat" key={label}>
-            <label>{label}</label>
+    <div className="teacher-overview">
+      <div className="overview-heading">
+        <div>
+          <div className="eyebrow">CLASS OVERVIEW</div>
+          <h1>
+            A clearer picture of <em>learning.</em>
+          </h1>
+          <p>
+            Understanding, progress, and the students who need your attention.
+          </p>
+        </div>
+        <Link className="btn primary" to="/teacher/assessments">
+          Create assessment <ArrowUpRight size={16} />
+        </Link>
+      </div>
+      <div className="overview-metrics">
+        {metrics.map(({ label, value, detail, Icon, tone, to }) => (
+          <Link
+            to={to}
+            className={"overview-metric " + tone}
+            key={label}
+            aria-label={label + ": " + value + ". View details"}
+          >
+            <div className="metric-label">
+              <span>{label}</span>
+              <Icon size={18} strokeWidth={1.6} />
+            </div>
             <strong>{value}</strong>
-            <small>{detail}</small>
-          </div>
+            <span className="metric-detail">
+              {detail} <ArrowUpRight size={13} />
+            </span>
+          </Link>
         ))}
       </div>
+      {priority && (
+        <section className="priority-insight">
+          <div className="insight-marker">
+            <Layers size={21} />
+          </div>
+          <div>
+            <span className="eyebrow">PRIORITY FOR YOUR CLASS</span>
+            <h2>{priority.topic} needs the most support</h2>
+            <p>
+              {priority.students} of {data.roster.length} students have this
+              learning gap. A focused explanation is a good next step.
+            </p>
+          </div>
+          <Link className="btn insight-action" to="/teacher/content">
+            Prepare explanation <ArrowRight size={16} />
+          </Link>
+        </section>
+      )}
+      <LearningCharts
+        clusters={data.clusters}
+        gaps={data.gaps}
+        students={data.roster.length}
+      />
       <div className="grid">
-        <section className="panel">
+        <section className="panel gap-panel">
           <div className="panelhead">
             <h2>Learning gaps</h2>
-            <span className="muted">Ranked by frequency and severity</span>
+            <span className="muted">Students needing support</span>
           </div>
           {data.clusters.length ? (
             data.clusters.map((c) => (
               <div className="gap" key={c.tag}>
-                <div>
+                <div className="gap-summary">
                   <Badge status={c.struggling ? "struggling" : "open"} />
                   <h3>{c.topic}</h3>
                   <div className="muted">{c.tag}</div>
                   <div className="muted" style={{ marginTop: 10 }}>
-                    {c.students} students · {c.section}
+                    {c.section}
+                  </div>
+                  <div className="gap-measure">
+                    <span>
+                      <strong>{c.students}</strong> of {data.roster.length}{" "}
+                      students
+                    </span>
+                    <span>
+                      {data.roster.length
+                        ? Math.round((c.students / data.roster.length) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <div
+                    className="gap-track"
+                    role="meter"
+                    aria-label={c.topic + " students needing support"}
+                    aria-valuemin={0}
+                    aria-valuemax={data.roster.length || 1}
+                    aria-valuenow={c.students}
+                  >
+                    <span
+                      style={{
+                        width:
+                          Math.min(
+                            100,
+                            (c.students / Math.max(1, data.roster.length)) *
+                              100,
+                          ) + "%",
+                      }}
+                    />
                   </div>
                 </div>
-                <Link className="btn" to="/teacher/content">
+                <Link className="btn small gap-action" to="/teacher/content">
                   Prepare explainer
                 </Link>
               </div>
@@ -100,24 +197,40 @@ export function Overview() {
             <h2>Questions from your class</h2>
             {data.asked.length ? (
               data.asked.slice(0, 5).map((q) => (
-                <div className="question" key={q.id}>
+                <Link
+                  to={
+                    "/teacher/students?search=" +
+                    encodeURIComponent(q.student_name)
+                  }
+                  className="question dashboard-student-link"
+                  key={q.id}
+                >
                   {q.text}
                   <div className="muted">{q.student_name}</div>
-                </div>
+                </Link>
               ))
             ) : (
-              <p className="muted">
-                Student questions will appear here as they are submitted.
-              </p>
+              <div className="overview-empty">
+                <MessageSquare size={24} strokeWidth={1.3} />
+                <strong>No questions yet</strong>
+                <p>Questions shared by your students will appear here.</p>
+              </div>
             )}
           </section>
           <section className="panel">
             <h2>Students to check in with</h2>
+            {!data.roster.some((s) => s.open_gaps > 0) && (
+              <p className="muted">No students currently need a check-in.</p>
+            )}
             {data.roster
               .filter((s) => s.open_gaps > 0)
               .slice(0, 4)
               .map((s) => (
-                <div className="activity" key={s.id}>
+                <Link
+                  to={"/teacher/students?student=" + s.id}
+                  className="activity dashboard-student-link"
+                  key={s.id}
+                >
                   <span className="avatar">
                     {s.name
                       .split(" ")
@@ -128,19 +241,30 @@ export function Overview() {
                     {s.name}
                     <div className="muted">{s.open_gaps} open gaps</div>
                   </div>
-                </div>
+                  <ArrowUpRight size={14} />
+                </Link>
               ))}
           </section>
           <section className="panel">
-            <h2>Most active students</h2>
+            <h2>Class participation</h2>
+            {!data.roster.some((s) => s.activity > 0) && (
+              <p className="muted">
+                Participation will appear as students share questions.
+              </p>
+            )}
             {[...data.roster]
+              .filter((s) => s.activity > 0)
               .sort((a, b) => b.activity - a.activity)
               .slice(0, 3)
               .map((s) => (
-                <div className="question" key={s.id}>
+                <Link
+                  className="question dashboard-student-link"
+                  to={"/teacher/students?student=" + s.id}
+                  key={s.id}
+                >
                   {s.name}
                   <b>{s.activity} questions</b>
-                </div>
+                </Link>
               ))}
           </section>
         </div>
@@ -180,7 +304,7 @@ export function Overview() {
           </table>
         </div>
       </section>
-    </>
+    </div>
   );
 }
 export function Assessments() {

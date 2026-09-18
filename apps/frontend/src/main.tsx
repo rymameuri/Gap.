@@ -1,3 +1,4 @@
+import { Students, GapDetails } from "./pages/instructor/ClassDetails";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -105,6 +106,8 @@ createRoot(document.getElementById("root")!).render(
             }
           >
             <Route path="overview" element={<Overview />} />
+            <Route path="students" element={<Students />} />
+            <Route path="gaps" element={<GapDetails />} />
             <Route path="assessments" element={<Assessments />} />
             <Route path="review" element={<ReviewQueue />} />
             <Route path="content" element={<ContentStudio />} />

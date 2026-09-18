@@ -39,6 +39,7 @@ export type Gap = {
   class_id: string;
   class_name?: string;
   student_name?: string;
+  student_id: string;
   content?: string;
   probe?: Question;
 };

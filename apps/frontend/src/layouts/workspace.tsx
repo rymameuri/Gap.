@@ -14,6 +14,8 @@ import {
   FileText,
   Activity,
   LogOut,
+  Users,
+  Layers,
 } from "lucide-react";
 import { api, ApiError } from "../services/api";
 import { useSession } from "../services/session";
@@ -67,6 +69,8 @@ export function TeacherLayout() {
   );
   const links = [
     ["overview", "Overview", LayoutDashboard],
+    ["students", "Students", Users],
+    ["gaps", "Learning gaps", Layers],
     ["assessments", "Assessments", ClipboardList],
     ["review", "Review queue", BookOpen],
     ["content", "Content studio", FileText],
