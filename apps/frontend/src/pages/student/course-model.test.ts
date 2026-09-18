@@ -17,6 +17,7 @@ const course: Course = {
 const gap: Gap = {
   id: "gap-1",
   class_id: "physics",
+  student_id: "sara",
   topic: "Motion",
   tag: "Force",
   section: "Unit 1",
