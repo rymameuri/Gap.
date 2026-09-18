@@ -290,3 +290,73 @@ describe("request context", () => {
     assert.ok(!JSON.stringify(app.logs).includes(student.split("=")[1] ?? ""));
   });
 });
+
+describe("behind a reverse proxy", () => {
+  const wrongLogin = (app: TestServer, client: string) =>
+    app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "X-Forwarded-For": client },
+      body: { email: TEACHER, password: "wrong-password" },
+    });
+
+  const askOverHttps = async (app: TestServer) => {
+    const student = await app.login(STUDENT);
+    const proxiedOrigin = app.baseUrl.replace("http://", "https://");
+    return app.request("/api/student/questions", {
+      method: "POST",
+      cookie: student,
+      headers: { Origin: proxiedOrigin, "X-Forwarded-Proto": "https" },
+      body: { classId: "physics", text: "Does the proxy change anything?" },
+    });
+  };
+
+  test("with TRUST_PROXY, login attempts are limited per forwarded client", async () => {
+    const app = await startTestServer({ TRUST_PROXY: "1" });
+    try {
+      for (let i = 0; i < 20; i++)
+        assert.equal((await wrongLogin(app, "203.0.113.1")).status, 401);
+      assert.equal((await wrongLogin(app, "203.0.113.1")).status, 429);
+      assert.equal((await wrongLogin(app, "203.0.113.2")).status, 401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("without TRUST_PROXY, forwarded addresses are ignored", async () => {
+    const app = await startTestServer();
+    try {
+      for (let i = 0; i < 20; i++)
+        assert.equal((await wrongLogin(app, "203.0.113.1")).status, 401);
+      assert.equal((await wrongLogin(app, "203.0.113.2")).status, 429);
+      const warnings = app.logs.filter(
+        (log) => log.level === 40 && String(log.msg).includes("TRUST_PROXY"),
+      );
+      assert.equal(warnings.length, 1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("with TRUST_PROXY, the app's own https origin may write", async () => {
+    const app = await startTestServer({ TRUST_PROXY: "1" });
+    try {
+      assert.equal((await askOverHttps(app)).status, 201);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("without TRUST_PROXY, a forwarded https origin is not the app's own", async () => {
+    const app = await startTestServer();
+    try {
+      const response = await askOverHttps(app);
+      assert.equal(response.status, 403);
+      assert.deepEqual(response.body, {
+        error: "This request origin is not permitted.",
+        code: "origin_not_allowed",
+      });
+    } finally {
+      await app.close();
+    }
+  });
+});
