@@ -798,7 +798,7 @@ export function createApp(store: Store) {
         correct,
         status: correct ? "resolved" : "struggling",
         message: correct
-          ? "Correct. Your gap is resolved, and your teacher’s dashboard has been updated."
+          ? "Correct. Your gap is resolved, and your teacher's dashboard has been updated."
           : "Not quite. The gap stays open, and your teacher has been notified for more support.",
       });
     }),
