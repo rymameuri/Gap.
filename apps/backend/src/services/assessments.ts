@@ -55,7 +55,7 @@ export function updateQuizDraft(
   saveQuizDraft(store, quiz.id, body.title, JSON.stringify(body.questions));
 }
 
-/** Makes the quiz visible to enrolled students. @throws NotFoundError, ZodError for an invalid stored quiz. */
+/** Makes a draft quiz visible to enrolled students. @throws NotFoundError, ConflictError when already published, ZodError for an invalid stored quiz. */
 export function publishQuiz(
   store: Store,
   teacherId: string,
@@ -64,6 +64,8 @@ export function publishQuiz(
   const quiz = findQuiz(store, quizId);
   if (!quiz) throw new NotFoundError("Quiz not found.");
   requireOwnedClass(store, teacherId, quiz.class_id);
+  if (quiz.status !== "draft")
+    throw new ConflictError("This assessment is already published.");
   quizSchema.parse({
     title: quiz.title,
     questions: parseQuestions(quiz.questions),
