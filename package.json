@@ -21,6 +21,7 @@
     "format:check:backend": "prettier --check \"apps/backend/**/*.{ts,mjs,json,md,yaml}\" eslint.config.js \".github/**/*.yml\"",
     "check:forbidden": "node --import tsx apps/backend/tools/check-forbidden.ts",
     "check:backend": "npm run typecheck:backend && npm run lint:backend && npm run format:check:backend && npm test && npm run check:forbidden",
+    "db": "node --import tsx apps/backend/src/migrate-cli.ts",
     "prepare": "node apps/backend/tools/install-hooks.mjs"
   },
   "dependencies": {
