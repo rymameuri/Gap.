@@ -91,11 +91,10 @@ export class AgentQueue {
     try {
       const course = findClass(this.store, job.class_id);
       if (!course) throw new Error("Class is unavailable");
-      const result =
-        job.kind === "assessment"
-          ? await this.draftQuiz(job, course)
-          : await this.prepareExplanation(job, course);
-      markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
+      // Each task marks the job succeeded in the transaction that stores its
+      // output, so a restart never repeats a task whose output was saved.
+      if (job.kind === "assessment") await this.draftQuiz(job, course);
+      else await this.prepareExplanation(job, course);
       this.logger.info(
         { jobId: job.id, kind: job.kind },
         "agent task succeeded",
@@ -119,11 +118,11 @@ export class AgentQueue {
     }
   }
 
-  private async draftQuiz(job: JobRow, course: ClassRow): Promise<JobResult> {
+  private async draftQuiz(job: JobRow, course: ClassRow): Promise<void> {
     const { topic } = parseAssessmentPayload(job.payload);
     const draft = await draftAssessment(topic, course.syllabus);
     const id = randomUUID();
-    const result = { quizId: id };
+    const result: JobResult = { quizId: id };
     this.store.transaction(() => {
       insertQuiz(this.store, {
         id,
@@ -149,13 +148,12 @@ export class AgentQueue {
       );
       markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
     });
-    return result;
   }
 
   private async prepareExplanation(
     job: JobRow,
     course: ClassRow,
-  ): Promise<JobResult> {
+  ): Promise<void> {
     const { gapId } = parseContentPayload(job.payload);
     const gap = findGapInClass(this.store, gapId, course.id);
     if (!gap) throw new Error("Learning gap is unavailable");
@@ -168,7 +166,7 @@ export class AgentQueue {
       course.syllabus,
     );
     const id = randomUUID();
-    const result = { interventionId: id };
+    const result: JobResult = { interventionId: id };
     this.store.transaction(() => {
       insertIntervention(this.store, {
         id,
@@ -193,6 +191,5 @@ export class AgentQueue {
       );
       markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
     });
-    return result;
   }
 }
