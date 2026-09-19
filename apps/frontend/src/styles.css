@@ -1912,93 +1912,218 @@ button:disabled {
   border-bottom-color: #17806a;
   font-weight: 600;
 }
-.workflow-flow-scroll {
+.workflow-diagram-scroll {
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: thin;
+  margin: 18px 0;
+  border: 1px solid #e1e7e6;
+  border-radius: 6px;
+  background: #f8faf9;
 }
-.workflow-flow {
-  display: flex;
-  width: max-content;
-  min-width: 100%;
-  margin: 0;
-  padding: 19px 0 16px;
-  list-style: none;
-}
-.workflow-flow li {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-}
-.workflow-node {
+.workflow-diagram {
   position: relative;
+  margin: 0 auto;
+}
+.workflow-connectors {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.workflow-connection {
+  color: #adbab6;
+}
+.workflow-connection-track,
+.workflow-connection-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linejoin: round;
+}
+.workflow-connection-track {
+  stroke-width: 7;
+  opacity: 0;
+}
+.workflow-connection-line {
+  stroke-width: 1.7;
+  transition: stroke 160ms ease;
+}
+.workflow-connection.is-source .workflow-connection-line {
+  stroke-dasharray: 4 4;
+}
+.workflow-connection.is-traversed,
+.workflow-connection.is-active {
+  color: #25846b;
+}
+.workflow-connection.pending.is-traversed,
+.workflow-connection.pending.is-active {
+  color: #b48124;
+}
+.workflow-connection.failed.is-traversed,
+.workflow-connection.failed.is-active {
+  color: #b5574b;
+}
+.workflow-connection.is-active .workflow-connection-track {
+  opacity: 0.13;
+}
+.workflow-connection.is-active .workflow-connection-line {
+  stroke-width: 2.5;
+}
+.workflow-connection.is-moving .workflow-connection-line {
+  stroke-dasharray: 7 5;
+  animation: workflow-travel 650ms linear infinite;
+}
+.workflow-connection-label {
+  fill: #63746d;
+  stroke: #f8faf9;
+  stroke-width: 6px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  font-size: 11px;
+  font-weight: 500;
+}
+.workflow-diagram-node {
+  position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  width: 140px;
-  height: 112px;
-  padding: 15px 12px 12px;
-  border: 1px solid #dce3e3;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 13px 14px;
+  border: 1px solid #d6dfdc;
   border-radius: 6px;
   background: #fff;
   color: #273136;
   text-align: left;
-}
-.workflow-model-flow .workflow-node {
-  background: #f8faf9;
-}
-.workflow-observed-flow .workflow-node {
   cursor: pointer;
   font: inherit;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
-.workflow-observed-flow .workflow-node:hover,
-.workflow-observed-flow .workflow-node.active {
-  border-color: #21806b;
-  background: #f4faf7;
+.workflow-diagram-node.source {
+  border-style: dashed;
 }
-.workflow-observed-flow .workflow-node.pending {
-  border-color: #dfcda9;
+.workflow-diagram-node:hover {
+  border-color: #769a8d;
 }
-.workflow-observed-flow .workflow-node.failed {
-  border-color: #e7c0bb;
+.workflow-diagram-node.is-selected {
+  border-color: #278169;
+  box-shadow: 0 0 0 3px #27816918;
 }
-.workflow-node-number {
-  color: #678075;
-  font-size: 11px;
-  font-weight: 700;
+.workflow-diagram-node.pending.is-selected {
+  border-color: #b48124;
+  box-shadow: 0 0 0 3px #b4812418;
 }
-.workflow-node small {
-  color: #557166;
+.workflow-diagram-node.failed.is-selected {
+  border-color: #b5574b;
+  box-shadow: 0 0 0 3px #b5574b18;
+}
+.workflow-node-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  color: #657870;
+}
+.workflow-node-heading span {
+  flex: 1;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
 }
-.workflow-node strong {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: 12px;
+.workflow-node-heading svg {
+  flex-shrink: 0;
+}
+.workflow-diagram-node.person .workflow-node-heading {
+  color: #516b98;
+}
+.workflow-diagram-node.decision .workflow-node-heading {
+  color: #946c2b;
+}
+.workflow-diagram-node.pending .workflow-node-heading,
+.workflow-legend .pending {
+  color: #a37524;
+}
+.workflow-diagram-node.failed .workflow-node-heading,
+.workflow-legend .failed {
+  color: #ae5147;
+}
+.workflow-diagram-node strong {
+  padding-right: 7px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.workflow-node-state {
+.workflow-node-order {
   position: absolute;
-  top: 13px;
-  right: 12px;
-  color: #287653;
+  bottom: 6px;
+  right: 9px;
+  font-size: 10px;
+  color: #8a9992;
 }
-.workflow-node.pending .workflow-node-state {
-  color: #966a1b;
+.workflow-playback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
 }
-.workflow-node.failed .workflow-node-state {
-  color: #a34d43;
+.workflow-playback-controls,
+.workflow-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.workflow-arrow {
-  flex: 0 0 auto;
-  margin: 0 5px;
-  color: #899a94;
+.workflow-playback-controls > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  width: 34px;
+  padding: 7px;
+  border: 1px solid #dce3e0;
+  border-radius: 5px;
+  background: #fff;
+  color: #3d5c50;
+}
+.workflow-playback-controls > .workflow-play-toggle {
+  width: 88px;
+}
+.workflow-playback-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.workflow-playback-controls > span {
+  min-width: 88px;
+  color: #66746e;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.workflow-legend {
+  gap: 13px;
+  color: #278169;
+  font-size: 11px;
+}
+.workflow-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+@keyframes workflow-travel {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workflow-connection.is-moving .workflow-connection-line {
+    animation: none;
+  }
 }
 .workflow-run-toolbar {
   display: flex;
@@ -2123,11 +2248,6 @@ button:disabled {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-}
-@media (max-width: 800px) {
-  .workflow-node {
-    width: 146px;
-  }
 }
 @media (max-width: 520px) {
   .workflow-heading {
