@@ -116,6 +116,42 @@ paths:
                         - $ref: "#/components/schemas/StudentClassCard"
         "401": { $ref: "#/components/responses/Unauthenticated" }
 
+  /api/classes/{id}/files:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listCourseFiles
+      tags: [classes]
+      responses:
+        "200":
+          description: Stored course files visible to the owner or an enrolled student.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files]
+                properties:
+                  files:
+                    type: array
+                    items: { $ref: "#/components/schemas/CourseFile" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/classes/{id}/files/{fileId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: fileId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: downloadCourseFile
+      tags: [classes]
+      responses:
+        "200": { description: Downloaded original file bytes. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/teacher/workspace:
     get:
       operationId: getTeacherWorkspace
@@ -233,6 +269,56 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorBody" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/teacher/classes/{id}/files:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: uploadCourseFile
+      tags: [teacher]
+      description: Stores the original file for download. Status remains stored until a separate indexing workflow exists.
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema: { type: string, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: Original file stored, not indexed for AI.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseFile" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+
+  /api/teacher/classes/{id}/files/{fileId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: fileId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteCourseFile
+      tags: [teacher]
+      responses:
+        "200":
+          description: Stored file deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/teacher/classes/{id}/enroll:
     parameters:
@@ -377,6 +463,34 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /api/teacher/agent-reviews/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: resolveAgentReview
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { enum: [publish, reject] }
+                content: { type: string, maxLength: 10000 }
+      responses:
+        "200":
+          description: AI response published or rejected by the class teacher.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /api/teacher/gaps/{id}/explainer:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -489,6 +603,56 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/student/classes/{id}/conversations:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listStudentConversations
+      tags: [student]
+      responses:
+        "200":
+          description: Saved conversations for this enrolled student and class.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversations]
+                properties:
+                  conversations:
+                    type: array
+                    items: { $ref: "#/components/schemas/ConversationSummary" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/student/conversations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getStudentConversation
+      tags: [student]
+      responses:
+        "200":
+          description: Conversation and saved turns for its owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationDetail" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteStudentConversation
+      tags: [student]
+      responses:
+        "200":
+          description: Conversation and messages deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/student/classes/{id}/assistant:
     post:
       operationId: askStudyAssistant
@@ -505,7 +669,9 @@ paths:
               required: [message]
               properties:
                 message: { type: string, minLength: 1, maxLength: 2000 }
+                conversationId: { type: string }
                 history:
+                  description: Legacy field accepted but ignored; stored server history is authoritative.
                   type: array
                   maxItems: 20
                   items:
@@ -641,6 +807,16 @@ components:
       schema: { type: string }
 
   responses:
+    BadRequest:
+      description: The selected file or its name is invalid.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    PayloadTooLarge:
+      description: The upload exceeds the course file limit.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
     ValidationFailed:
       description: The request body or parameters are invalid.
       content:
@@ -741,6 +917,30 @@ components:
         syllabus: { type: string }
         material_version: { type: integer, minimum: 1 }
         join_code: { $ref: "#/components/schemas/JoinCode" }
+
+    CourseFile:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          class_id,
+          filename,
+          mime_type,
+          size_bytes,
+          sha256,
+          status,
+          created_at,
+        ]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        filename: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer, minimum: 1 }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        status: { enum: [stored, indexed, failed] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
 
     StudentCourse:
       description: A joined class as students see it. Join codes and teacher ids stay private.
@@ -876,6 +1076,7 @@ components:
           source,
           content,
           probe,
+          resolved_by_submission_id,
         ]
       properties:
         id: { type: string }
@@ -887,6 +1088,7 @@ components:
         section: { type: string }
         status: { $ref: "#/components/schemas/GapStatus" }
         source: { type: string }
+        resolved_by_submission_id: { type: [string, "null"] }
         content:
           description: Teacher-approved explanation, or null until one is shared.
           type: [string, "null"]
@@ -1005,6 +1207,37 @@ components:
         confidence: { type: number, minimum: 0, maximum: 1 }
         reason: { type: string }
 
+    AgentReview:
+      type: object
+      required:
+        [
+          id,
+          class_id,
+          student_id,
+          student_name,
+          kind,
+          content,
+          sources,
+          issues,
+          status,
+          created_at,
+        ]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        student_id: { type: string }
+        student_name: { type: string }
+        kind: { const: study_response }
+        content: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/StudySource" }
+        issues:
+          type: array
+          items: { type: string }
+        status: { const: pending }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
     Intervention:
       type: object
       required: [id, topic, tag, content, probe, targets, status, engine]
@@ -1058,6 +1291,7 @@ components:
           roster,
           quizzes,
           reviews,
+          agentReviews,
           interventions,
           events,
           asked,
@@ -1081,6 +1315,9 @@ components:
           type: array
           items: { $ref: "#/components/schemas/TeacherQuiz" }
         reviews: { type: array, items: { $ref: "#/components/schemas/Review" } }
+        agentReviews:
+          type: array
+          items: { $ref: "#/components/schemas/AgentReview" }
         interventions:
           type: array
           items: { $ref: "#/components/schemas/Intervention" }
@@ -1205,6 +1442,40 @@ components:
           items: { $ref: "#/components/schemas/ProgressEntry" }
         engine: { $ref: "#/components/schemas/Engine" }
 
+    ConversationSummary:
+      type: object
+      required: [id, class_id, title, created_at, updated_at]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        title: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+
+    ConversationMessage:
+      type: object
+      required:
+        [id, role, content, sources, grounded, requiresHumanReview, created_at]
+      properties:
+        id: { type: string }
+        role: { enum: [user, assistant] }
+        content: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/StudySource" }
+        grounded: { type: [boolean, "null"] }
+        requiresHumanReview: { type: [boolean, "null"] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    ConversationDetail:
+      type: object
+      required: [conversation, messages]
+      properties:
+        conversation: { $ref: "#/components/schemas/ConversationSummary" }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ConversationMessage" }
+
     StudySource:
       type: object
       additionalProperties: false
@@ -1219,7 +1490,8 @@ components:
     StudyAssistantResponse:
       type: object
       additionalProperties: false
-      required: [content, sources, grounded, requiresHumanReview]
+      required:
+        [content, sources, grounded, requiresHumanReview, conversationId]
       properties:
         content: { type: string, minLength: 1 }
         sources:
@@ -1227,6 +1499,7 @@ components:
           items: { $ref: "#/components/schemas/StudySource" }
         grounded: { type: boolean }
         requiresHumanReview: { type: boolean }
+        conversationId: { type: string }
 
     JoinResult:
       type: object

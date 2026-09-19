@@ -69,12 +69,23 @@ const importedDocument = z.object({
 });
 const importFailure = z.object({ detail: z.object({ code: z.string() }) });
 
+export interface PendingStudyReview {
+  readonly id: string;
+  readonly content: string;
+  readonly sources: readonly StudySource[];
+  readonly issues: readonly string[];
+}
+
+export type AIStudyResponse = StudyResponse & {
+  readonly pendingReview?: PendingStudyReview;
+};
+
 export interface AIServiceClient {
   extractDocument(
     filename: string,
     content: Uint8Array,
   ): Promise<DocumentImportResult>;
-  study(request: StudyRequest): Promise<StudyResponse>;
+  study(request: StudyRequest): Promise<AIStudyResponse>;
   modelJSON(instructions: string, data: unknown): Promise<unknown>;
 }
 
@@ -98,6 +109,15 @@ const internalStudyResponse = z.object({
   sources: z.array(internalSource),
   grounded: z.boolean(),
   requires_human_review: z.boolean(),
+  pending_review: z
+    .object({
+      id: z.string(),
+      content: z.string(),
+      sources: z.array(internalSource),
+      issues: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
 });
 
 const internalModelResponse = z.object({
@@ -113,7 +133,7 @@ export class PythonAIServiceClient implements AIServiceClient {
     this.#token = config.token;
   }
 
-  async study(request: StudyRequest): Promise<StudyResponse> {
+  async study(request: StudyRequest): Promise<AIStudyResponse> {
     const response = internalStudyResponse.parse(
       await this.#post("/v1/study", {
         user_id: request.userId,
@@ -126,17 +146,28 @@ export class PythonAIServiceClient implements AIServiceClient {
       }),
     );
 
+    const source = (item: z.infer<typeof internalSource>): StudySource => ({
+      documentId: item.document_id,
+      title: item.title,
+      page: item.page,
+      slide: item.slide,
+      chunkId: item.chunk_id,
+    });
     return {
       content: response.content,
-      sources: response.sources.map((source) => ({
-        documentId: source.document_id,
-        title: source.title,
-        page: source.page,
-        slide: source.slide,
-        chunkId: source.chunk_id,
-      })),
+      sources: response.sources.map(source),
       grounded: response.grounded,
       requiresHumanReview: response.requires_human_review,
+      ...(response.pending_review
+        ? {
+            pendingReview: {
+              id: response.pending_review.id,
+              content: response.pending_review.content,
+              sources: response.pending_review.sources.map(source),
+              issues: response.pending_review.issues,
+            },
+          }
+        : {}),
     };
   }
 

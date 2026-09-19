@@ -24,6 +24,7 @@ import {
   updateIntervention,
 } from "../services/learning.js";
 import { teacherWorkspace } from "../services/workspaces.js";
+import { resolveAgentReview } from "../services/agent-reviews.js";
 import { param, queryString, type RouteContext } from "./context.js";
 
 export function registerTeacherRoutes(
@@ -133,6 +134,15 @@ export function registerTeacherRoutes(
     teacherOnly,
     asyncRoute((req, res) => {
       approveReview(store, req.user.id, param(req, "id"), req.body);
+      res.json(ok);
+    }),
+  );
+
+  app.post(
+    "/api/teacher/agent-reviews/:id",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      resolveAgentReview(store, req.user.id, param(req, "id"), req.body);
       res.json(ok);
     }),
   );

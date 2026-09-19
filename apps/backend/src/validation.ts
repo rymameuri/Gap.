@@ -54,6 +54,7 @@ export const questionBody = z.object({
 
 export const studyAssistantBody = z.object({
   message: z.string().trim().min(1).max(2000),
+  conversationId: z.string().uuid().optional(),
   history: z
     .array(
       z.object({
@@ -63,4 +64,9 @@ export const studyAssistantBody = z.object({
     )
     .max(20)
     .default([]),
+});
+
+export const agentReviewBody = z.object({
+  action: z.enum(["publish", "reject"]),
+  content: z.string().max(10_000).optional(),
 });

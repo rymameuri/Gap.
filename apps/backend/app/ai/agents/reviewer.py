@@ -235,6 +235,15 @@ class HumanReviewQueue:
                 f"Unknown review ID: {review_id}"
             ) from exc
 
+    def take(self, review_id: str) -> HumanReviewItem:
+        """Transfer a pending item to the durable backend queue."""
+
+        item = self.get(review_id)
+        if item.status != ReviewQueueStatus.PENDING:
+            raise ValueError("Only pending items can be transferred.")
+        del self._items[review_id]
+        return item
+
     def list_pending(
         self,
         *,

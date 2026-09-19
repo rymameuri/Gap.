@@ -4,12 +4,17 @@ import type {
 } from "../agents/python-service.js";
 import type { Store } from "../db.js";
 import { AIServiceRequestError } from "../agents/python-service.js";
+import { recordAgentReview } from "./agent-reviews.js";
 import {
   ConflictError,
   NotFoundError,
   ServiceUnavailableError,
 } from "../errors.js";
 import { findClass, isMember } from "../repositories/classes.js";
+import {
+  appendConversationTurn,
+  conversationHistory,
+} from "./conversations.js";
 import { studyAssistantBody } from "../validation.js";
 
 /**
@@ -22,14 +27,17 @@ export async function askStudyAssistant(
   studentId: string,
   classId: string,
   input: unknown,
-): Promise<StudyResponse> {
+): Promise<StudyResponse & { conversationId: string }> {
   if (!isMember(store, classId, studentId))
     throw new NotFoundError("Class not found.");
 
   const course = findClass(store, classId);
   if (course === undefined) throw new NotFoundError("Class not found.");
 
-  const { message, history } = studyAssistantBody.parse(input);
+  const { message, conversationId } = studyAssistantBody.parse(input);
+  const history = conversationId
+    ? conversationHistory(store, studentId, classId, conversationId)
+    : [];
 
   if (!course.syllabus.trim())
     throw new ConflictError(
@@ -42,7 +50,7 @@ export async function askStudyAssistant(
     );
 
   try {
-    return await aiService.study({
+    const response = await aiService.study({
       userId: studentId,
       courseId: course.id,
       message,
@@ -50,6 +58,31 @@ export async function askStudyAssistant(
       syllabus: course.syllabus,
       materialVersion: course.material_version,
       history,
+    });
+    const { pendingReview, ...safeResponse } = response;
+    if (safeResponse.requiresHumanReview && !pendingReview)
+      throw new ServiceUnavailableError(
+        "The Study Assistant could not save this item for instructor review.",
+      );
+    return store.transaction(() => {
+      const saved = appendConversationTurn(
+        store,
+        studentId,
+        classId,
+        conversationId,
+        message,
+        safeResponse,
+      );
+      if (pendingReview)
+        recordAgentReview(
+          store,
+          classId,
+          studentId,
+          saved.conversationId,
+          saved.assistantMessageId,
+          pendingReview,
+        );
+      return { ...safeResponse, conversationId: saved.conversationId };
     });
   } catch (error) {
     if (error instanceof AIServiceRequestError)

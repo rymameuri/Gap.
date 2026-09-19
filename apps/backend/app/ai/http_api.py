@@ -22,6 +22,7 @@ from app.ai.llm.client import (
 from app.ai.schemas.models import (
     AgentRequest,
     ChatMessage,
+    HumanReviewItem,
     SourceReference,
     UserRole,
     WorkflowResponse,
@@ -46,6 +47,9 @@ class SharedAIService(Protocol):
     async def run(self, request: AgentRequest) -> WorkflowResponse:
         ...
 
+    def take_review_item(self, review_id: str) -> HumanReviewItem:
+        ...
+
 
 class StudyRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=200)
@@ -57,11 +61,19 @@ class StudyRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
 
 
+class PendingStudyReview(BaseModel):
+    id: str
+    content: str
+    sources: list[SourceReference]
+    issues: list[str]
+
+
 class StudyResponse(BaseModel):
     content: str
     sources: list[SourceReference]
     grounded: bool
     requires_human_review: bool
+    pending_review: PendingStudyReview | None = None
 
 
 class ModelJSONRequest(BaseModel):
@@ -219,11 +231,23 @@ def create_app(
         )
         result = response.result
 
+        pending_review = None
+        review_id = result.metadata.get("review_id")
+        if result.requires_human_review and isinstance(review_id, str):
+            item = shared_service.take_review_item(review_id)
+            pending_review = PendingStudyReview(
+                id=item.review_id,
+                content=item.result.content,
+                sources=item.result.sources,
+                issues=item.issues,
+            )
+
         return StudyResponse(
             content=result.content,
             sources=result.sources,
             grounded=bool(result.metadata.get("grounded", False)),
             requires_human_review=result.requires_human_review,
+            pending_review=pending_review,
         )
 
     @app.post("/v1/model-json", response_model=ModelJSONResponse)

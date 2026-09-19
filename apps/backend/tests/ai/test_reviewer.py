@@ -181,3 +181,23 @@ def test_queue_can_publish_or_revise_items() -> None:
             review_id=item.review_id,
             action=ReviewAction.PUBLISH,
         )
+
+
+def test_handoff_removes_item_from_sidecar_queue() -> None:
+    queue = HumanReviewQueue()
+    request = AgentRequest(
+        user_id="student-1",
+        course_id="physics-101",
+        role=UserRole.STUDENT,
+        message="Explain momentum.",
+    )
+    result = grounded_study_result().model_copy(
+        update={"requires_human_review": True}
+    )
+    review = RuleBasedReviewer().review_agent_result(result)
+    item = queue.enqueue(request=request, result=result, review=review)
+
+    assert queue.take(item.review_id) == item
+    assert queue.list_pending(course_id="physics-101") == []
+    with pytest.raises(KeyError):
+        queue.get(item.review_id)

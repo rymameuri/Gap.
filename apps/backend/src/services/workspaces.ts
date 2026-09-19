@@ -56,6 +56,7 @@ import {
   type PriorityExplanation,
 } from "../explain/cluster-priority.js";
 import { requireOwnedClass } from "./classes.js";
+import { pendingAgentReviews, type AgentReviewView } from "./agent-reviews.js";
 
 type WithJson<T, K extends keyof T, V> = Omit<T, K> & Record<K, V>;
 
@@ -100,6 +101,7 @@ export interface TeacherWorkspace {
   roster: RosterEntry[];
   quizzes: TeacherQuizView[];
   reviews: ReviewView[];
+  agentReviews: AgentReviewView[];
   interventions: InterventionView[];
   events: EventView[];
   asked: AskedQuestionRow[];
@@ -144,6 +146,7 @@ export function teacherWorkspace(
       answers: parseAnswers(row.answers),
       results: parseGrades(row.results),
     })),
+    agentReviews: pendingAgentReviews(store, course.id),
     interventions: classInterventions(store, course.id).map((row) => ({
       ...row,
       probe: parseQuestion(row.probe),

@@ -36,6 +36,7 @@ const SEED_APPROVED_INTERVENTION = "welcome-explainer";
 const MISSING = "does-not-exist";
 const JOB_POLL_ATTEMPTS = 50;
 const JOB_POLL_INTERVAL_MS = 20;
+let contractReviewMode = false;
 
 const contractAI: AIServiceClient = {
   extractDocument() {
@@ -45,6 +46,22 @@ const contractAI: AIServiceClient = {
     });
   },
   study() {
+    if (contractReviewMode) {
+      contractReviewMode = false;
+      return Promise.resolve({
+        content:
+          "This response needs instructor review before it can be shown.",
+        sources: [],
+        grounded: false,
+        requiresHumanReview: true,
+        pendingReview: {
+          id: "contract-agent-review",
+          content: "A draft explanation for teacher review.",
+          sources: [],
+          issues: ["Needs review"],
+        },
+      });
+    }
     return Promise.resolve({
       content: "A net force changes an object's velocity [S1].",
       sources: [
@@ -123,6 +140,28 @@ describe("API contract", () => {
       operation,
       await app.request(path, { method, ...init }),
     );
+  };
+
+  const binaryCall = async (
+    operation: string,
+    path: string,
+    cookie: string,
+    content: Uint8Array,
+  ): Promise<unknown> => {
+    const response = await fetch(app.baseUrl + path, {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        Origin: "http://localhost:3000",
+        "Content-Type": "application/octet-stream",
+      },
+      body: new Uint8Array(content),
+    });
+    return contract.check(operation, {
+      status: response.status,
+      headers: response.headers,
+      body: await response.json(),
+    });
   };
 
   const teacherWorkspace = () =>
@@ -318,6 +357,94 @@ describe("API contract", () => {
         { cookie: sara },
       );
     });
+
+    test("stores, lists, downloads, and deletes course files with validation", async () => {
+      const uploadOperation = "POST /api/teacher/classes/{id}/files";
+      const uploadPath = `/api/teacher/classes/${classId}/files?filename=notes.txt`;
+      const uploaded = await binaryCall(
+        uploadOperation,
+        uploadPath,
+        teacher,
+        Buffer.from("Course notes for this class."),
+      );
+      const fileId = stringField(uploaded, "id");
+      await binaryCall(
+        uploadOperation,
+        uploadPath.replace("notes.txt", "bad.pdf"),
+        teacher,
+        Buffer.from("not a PDF"),
+      );
+      await binaryCall(
+        uploadOperation,
+        uploadPath.replace(`/${classId}/`, "/missing/"),
+        teacher,
+        Buffer.from("Course notes"),
+      );
+      await binaryCall(
+        uploadOperation,
+        uploadPath,
+        teacher,
+        Buffer.alloc(5 * 1024 * 1024 + 1, 65),
+      );
+      const listed = await call(
+        "GET /api/classes/{id}/files",
+        `/api/classes/${classId}/files`,
+        { cookie: sara },
+      );
+      assert.equal(list<{ id: string }>(listed, "files")[0]?.id, fileId);
+      await call("GET /api/classes/{id}/files", "/api/classes/missing/files", {
+        cookie: sara,
+      });
+      const downloaded = await fetch(
+        `${app.baseUrl}/api/classes/${classId}/files/${fileId}`,
+        { headers: { Cookie: sara } },
+      );
+      assert.equal(await downloaded.text(), "Course notes for this class.");
+      contract.check("GET /api/classes/{id}/files/{fileId}", {
+        status: downloaded.status,
+        headers: downloaded.headers,
+        body: null,
+      });
+      await call(
+        "GET /api/classes/{id}/files/{fileId}",
+        `/api/classes/${classId}/files/missing`,
+        { cookie: sara },
+      );
+      await call(
+        "DELETE /api/teacher/classes/{id}/files/{fileId}",
+        `/api/teacher/classes/${classId}/files/${fileId}`,
+        { cookie: teacher },
+      );
+      await call(
+        "DELETE /api/teacher/classes/{id}/files/{fileId}",
+        `/api/teacher/classes/${classId}/files/missing`,
+        { cookie: teacher },
+      );
+      app.store.transaction(() => {
+        for (let index = 0; index < 20; index++)
+          app.store.run(
+            "INSERT INTO course_files(id,class_id,uploaded_by,filename,mime_type,size_bytes,sha256,content,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            [
+              `quota-${String(index)}`,
+              classId,
+              "teacher",
+              `quota-${String(index)}.txt`,
+              "text/plain",
+              1,
+              "a".repeat(64),
+              new Uint8Array([65]),
+              "stored",
+              new Date().toISOString(),
+            ],
+          );
+      });
+      await binaryCall(
+        uploadOperation,
+        uploadPath,
+        teacher,
+        Buffer.from("More notes"),
+      );
+    });
   });
 
   describe("material import", () => {
@@ -414,6 +541,81 @@ describe("API contract", () => {
       } finally {
         await server.close();
       }
+    });
+  });
+
+  describe("saved conversations and AI review", () => {
+    test("lists, reads, and deletes student-owned conversations", async () => {
+      const asked = await call(
+        "POST /api/student/classes/{id}/assistant",
+        "/api/student/classes/physics/assistant",
+        { cookie: sara, body: { message: "Explain acceleration" } },
+      );
+      const conversationId = stringField(asked, "conversationId");
+      await call(
+        "GET /api/student/classes/{id}/conversations",
+        "/api/student/classes/physics/conversations",
+        { cookie: sara },
+      );
+      await call(
+        "GET /api/student/classes/{id}/conversations",
+        "/api/student/classes/missing/conversations",
+        { cookie: sara },
+      );
+      await call(
+        "GET /api/student/conversations/{id}",
+        `/api/student/conversations/${conversationId}`,
+        { cookie: sara },
+      );
+      await call(
+        "GET /api/student/conversations/{id}",
+        "/api/student/conversations/missing",
+        { cookie: sara },
+      );
+      await call(
+        "DELETE /api/student/conversations/{id}",
+        `/api/student/conversations/${conversationId}`,
+        { cookie: sara },
+      );
+      await call(
+        "DELETE /api/student/conversations/{id}",
+        `/api/student/conversations/${conversationId}`,
+        { cookie: sara },
+      );
+    });
+
+    test("teacher reviews a held AI response through the durable queue", async () => {
+      contractReviewMode = true;
+      const asked = await call(
+        "POST /api/student/classes/{id}/assistant",
+        "/api/student/classes/physics/assistant",
+        { cookie: sara, body: { message: "Help with motion" } },
+      );
+      assert.ok(!JSON.stringify(asked).includes("draft explanation"));
+      const workspace = await teacherWorkspace();
+      assert.ok(
+        list<{ id: string }>(workspace, "agentReviews").some(
+          (item) => item.id === "contract-agent-review",
+        ),
+      );
+      const operation = "POST /api/teacher/agent-reviews/{id}";
+      const path = "/api/teacher/agent-reviews/contract-agent-review";
+      await call(operation, path, {
+        cookie: teacher,
+        body: { action: "invalid" },
+      });
+      await call(operation, "/api/teacher/agent-reviews/missing", {
+        cookie: teacher,
+        body: { action: "publish" },
+      });
+      await call(operation, path, {
+        cookie: teacher,
+        body: { action: "publish" },
+      });
+      await call(operation, path, {
+        cookie: teacher,
+        body: { action: "publish" },
+      });
     });
   });
 
@@ -674,6 +876,7 @@ describe("API contract", () => {
       const ready = gaps.find((gap) => gap.probe !== null);
       const option = ready?.probe?.options[0];
       assert.ok(ready && option !== undefined);
+      app.store.run("UPDATE gaps SET status='ready' WHERE id=?", [ready.id]);
       const path = `/api/student/gaps/${ready.id}/recheck`;
       await call("POST /api/student/gaps/{id}/recheck", path, {
         cookie: sara,

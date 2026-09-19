@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -162,6 +163,47 @@ def test_study_indexes_each_material_version_once() -> None:
         ],
         "grounded": True,
         "requires_human_review": False,
+        "pending_review": None,
+    }
+
+
+def test_private_review_payload_is_handed_to_backend_without_publishing_it() -> None:
+    class PendingService(FakeService):
+        async def run(self, request: AgentRequest) -> WorkflowResponse:
+            response = await super().run(request)
+            gated = response.result.model_copy(
+                update={
+                    "content": "This response needs instructor review.",
+                    "sources": [],
+                    "requires_human_review": True,
+                    "metadata": {"review_id": "review-1"},
+                }
+            )
+            return response.model_copy(update={"result": gated})
+
+        def take_review_item(self, review_id: str) -> Any:
+            assert review_id == "review-1"
+            return SimpleNamespace(
+                review_id=review_id,
+                result=AgentResult(
+                    agent=AgentName.STUDY,
+                    content="Private draft for the teacher.",
+                    sources=[],
+                ),
+                issues=["Needs teacher review."],
+            )
+
+    app = create_app(service=PendingService(), internal_token=TOKEN)
+    with TestClient(app) as client:
+        response = client.post("/v1/study", headers=headers(), json=study_body())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["content"] == "This response needs instructor review."
+    assert body["pending_review"] == {
+        "id": "review-1",
+        "content": "Private draft for the teacher.",
+        "sources": [],
+        "issues": ["Needs teacher review."],
     }
 
 

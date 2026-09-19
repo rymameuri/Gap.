@@ -419,6 +419,11 @@ class AIService:
             course_id=course_id
         )
 
+    def take_review_item(self, review_id: str) -> HumanReviewItem:
+        """Transfer a private review item to the durable backend queue."""
+
+        return self._review_queue.take(review_id)
+
     def resolve_review(
         self,
         *,

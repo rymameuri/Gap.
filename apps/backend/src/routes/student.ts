@@ -7,6 +7,11 @@ import { joinClass } from "../services/classes.js";
 import { askQuestion, recheckGap } from "../services/learning.js";
 import { studentWorkspace } from "../services/workspaces.js";
 import { askStudyAssistant } from "../services/study-assistant.js";
+import {
+  deleteConversation,
+  getConversation,
+  listConversations,
+} from "../services/conversations.js";
 import { param, queryString, type RouteContext } from "./context.js";
 
 export function registerStudentRoutes(
@@ -25,6 +30,21 @@ export function registerStudentRoutes(
 
   app.get("/api/student/workspace", studentOnly, (req, res) => {
     res.json(studentWorkspace(store, req.user.id, queryString(req, "classId")));
+  });
+
+  app.get("/api/student/classes/:id/conversations", studentOnly, (req, res) => {
+    res.json({
+      conversations: listConversations(store, req.user.id, param(req, "id")),
+    });
+  });
+
+  app.get("/api/student/conversations/:id", studentOnly, (req, res) => {
+    res.json(getConversation(store, req.user.id, param(req, "id")));
+  });
+
+  app.delete("/api/student/conversations/:id", studentOnly, (req, res) => {
+    deleteConversation(store, req.user.id, param(req, "id"));
+    res.json({ ok: true });
   });
 
   app.post(
