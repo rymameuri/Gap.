@@ -5,8 +5,10 @@ import {
   backfillMissingJoinCodes,
   baseline,
   classJoinCode,
+  classInvitations,
   gapResolutions,
   learningRecords,
+  workflowTraces,
   type Migration,
 } from "./migrations/index.js";
 import { JOIN_CODE_INDEX } from "./migrations/0002-class-join-code.js";
@@ -135,6 +137,40 @@ function reconcileEarlyLearningRecords(store: Store): {
   return { adopted: [learningRecords.id], applied: [gapResolutions.id] };
 }
 
+// A local watcher may have applied workflow traces as 0006 before class
+// invitations became the released 0006 migration. Keep its trace rows and
+// install invitations in the missing slot instead of rejecting the database.
+function reconcileEarlyWorkflowTraces(store: Store): {
+  adopted: string[];
+  applied: string[];
+} {
+  const early = [
+    baseline.id,
+    classJoinCode.id,
+    backfillMissingJoinCodes.id,
+    gapResolutions.id,
+    learningRecords.id,
+    "0006-workflow-traces",
+  ];
+  if (appliedMigrations(store).join("\n") !== early.join("\n"))
+    return { adopted: [], applied: [] };
+  for (const table of ["workflow_runs", "workflow_steps"])
+    if (!tableExists(store, table))
+      throw new MigrationError(
+        `Early workflow-traces migration is missing ${table}; restore a matching database.`,
+      );
+  if (tableExists(store, "class_invitations"))
+    throw new MigrationError(
+      "Early workflow-traces migration already has class invitations; inspect the migration ledger before continuing.",
+    );
+  classInvitations.up(store);
+  store.run(`UPDATE ${LEDGER} SET id=? WHERE id='0006-workflow-traces'`, [
+    workflowTraces.id,
+  ]);
+  record(store, classInvitations.id);
+  return { adopted: [workflowTraces.id], applied: [classInvitations.id] };
+}
+
 export interface MigrationResult {
   /** Migrations recorded for a database created before migrations existed. */
   readonly adopted: readonly string[];
@@ -157,7 +193,11 @@ export function migrate(
     );
     const adopted = adoptLegacySchema(store);
     const early = reconcileEarlyLearningRecords(store);
-    return { adopted: [...adopted, ...early.adopted], applied: early.applied };
+    const workflow = reconcileEarlyWorkflowTraces(store);
+    return {
+      adopted: [...adopted, ...early.adopted, ...workflow.adopted],
+      applied: [...early.applied, ...workflow.applied],
+    };
   });
   const done = appliedMigrations(store);
   assertKnownPrefix(done, migrations);

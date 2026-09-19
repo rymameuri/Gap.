@@ -14,6 +14,7 @@ import {
 import {
   MIGRATIONS,
   learningRecords,
+  workflowTraces,
   type Migration,
 } from "./migrations/index.js";
 import { SCHEMA_SNAPSHOT_FILE, renderSchemaSnapshot } from "./schema-file.js";
@@ -275,6 +276,41 @@ test("adopts the early learning-records migration without losing existing data",
   );
   assert.deepEqual(review, { content: "Review me", message_id: null });
   assert.deepEqual(migrate(store), { adopted: [], applied: [] });
+  store.db.close();
+});
+
+test("adopts early workflow traces after installing class invitations", async () => {
+  const store = await blank();
+  const earlyWorkflow = { ...workflowTraces, id: "0006-workflow-traces" };
+  migrate(store, [...MIGRATIONS.slice(0, 5), earlyWorkflow]);
+  seed(store, "demo-password");
+  store.run(
+    "INSERT INTO workflow_runs(id,class_id,kind,title,status,created_at,updated_at) VALUES('run-1','physics','quiz_draft','Forces','complete','2026-09-19','2026-09-19')",
+  );
+  store.run(
+    "INSERT INTO workflow_steps(id,run_id,position,actor,action,detail,state,created_at) VALUES('step-1','run-1',1,'Assessment','Drafted','Saved','complete','2026-09-19')",
+  );
+  assert.deepEqual(migrate(store), {
+    adopted: ["0007-workflow-traces"],
+    applied: ["0006-class-invitations"],
+  });
+  assert.deepEqual(appliedMigrations(store), IDS);
+  assert.equal(
+    store.one<{ title: string }>(
+      "SELECT title FROM workflow_runs WHERE id='run-1'",
+    )?.title,
+    "Forces",
+  );
+  assert.equal(
+    store.one<{ action: string }>(
+      "SELECT action FROM workflow_steps WHERE id='step-1'",
+    )?.action,
+    "Drafted",
+  );
+  assert.equal(
+    schemaSnapshot(store),
+    schemaSnapshot(await openStore(":memory:")),
+  );
   store.db.close();
 });
 
