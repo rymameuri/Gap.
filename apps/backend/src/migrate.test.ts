@@ -98,13 +98,10 @@ describe("migrate", () => {
     const before = store.all(
       "SELECT id,name,syllabus FROM classes ORDER BY id",
     );
-    assert.deepEqual(rollback(store, 5), [
-      "0006-class-invitations",
-      "0005-learning-records",
-      "0004-gap-resolutions",
-      "0003-backfill-join-codes",
-      "0002-class-join-code",
-    ]);
+    assert.deepEqual(
+      rollback(store, MIGRATIONS.length - 1),
+      IDS.slice(1).reverse(),
+    );
     assert.deepEqual(
       store.all("SELECT id,name,syllabus FROM classes ORDER BY id"),
       before,
@@ -182,12 +179,7 @@ describe("join code backfill", () => {
     store.run(
       "INSERT INTO classes(id,teacher_id,name,syllabus) VALUES('c1','t1','Physics','Units')",
     );
-    assert.deepEqual(migrate(store).applied, [
-      "0003-backfill-join-codes",
-      "0004-gap-resolutions",
-      "0005-learning-records",
-      "0006-class-invitations",
-    ]);
+    assert.deepEqual(migrate(store).applied, IDS.slice(2));
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",
     );
@@ -212,12 +204,7 @@ describe("legacy databases", () => {
     const result = migrate(store);
     assert.deepEqual(result, {
       adopted: ["0001-baseline", "0002-class-join-code"],
-      applied: [
-        "0003-backfill-join-codes",
-        "0004-gap-resolutions",
-        "0005-learning-records",
-        "0006-class-invitations",
-      ],
+      applied: IDS.slice(2),
     });
     const course = store.one<{ name: string; join_code: string }>(
       "SELECT name,join_code FROM classes WHERE id='c1'",
@@ -233,13 +220,7 @@ describe("legacy databases", () => {
     const result = migrate(store);
     assert.deepEqual(result, {
       adopted: ["0001-baseline"],
-      applied: [
-        "0002-class-join-code",
-        "0003-backfill-join-codes",
-        "0004-gap-resolutions",
-        "0005-learning-records",
-        "0006-class-invitations",
-      ],
+      applied: IDS.slice(1),
     });
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",
@@ -281,7 +262,11 @@ test("adopts the early learning-records migration without losing existing data",
   });
   assert.deepEqual(migrate(store), {
     adopted: ["0005-learning-records"],
-    applied: ["0004-gap-resolutions", "0006-class-invitations"],
+    applied: [
+      "0004-gap-resolutions",
+      "0006-class-invitations",
+      "0007-workflow-traces",
+    ],
   });
   assert.deepEqual(appliedMigrations(store), IDS);
   assert.ok(store.one("SELECT 1 FROM gap_resolutions LIMIT 1") === undefined);

@@ -21,6 +21,7 @@ from app.ai.llm.client import (
 )
 from app.ai.schemas.models import (
     AgentRequest,
+    AgentName,
     ChatMessage,
     HumanReviewItem,
     SourceReference,
@@ -74,6 +75,8 @@ class StudyResponse(BaseModel):
     grounded: bool
     requires_human_review: bool
     pending_review: PendingStudyReview | None = None
+    routed_to: AgentName
+    produced_by: AgentName
 
 
 class ModelJSONRequest(BaseModel):
@@ -248,6 +251,8 @@ def create_app(
             grounded=bool(result.metadata.get("grounded", False)),
             requires_human_review=result.requires_human_review,
             pending_review=pending_review,
+            routed_to=response.route.target_agent,
+            produced_by=result.agent,
         )
 
     @app.post("/v1/model-json", response_model=ModelJSONResponse)

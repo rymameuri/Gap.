@@ -246,9 +246,23 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
       teacher,
     );
     assert.equal(draft.status, 202);
-    const quizId = stringField(
-      await jobResult(stringField(draft.body, "jobId")),
-      "quizId",
+    const draftJobId = stringField(draft.body, "jobId");
+    const quizId = stringField(await jobResult(draftJobId), "quizId");
+    const draftedTrace = objects(
+      (
+        await call(
+          "/teacher/workspace?classId=physics",
+          "GET",
+          undefined,
+          teacher,
+        )
+      ).body,
+      "workflows",
+    ).find((run) => run.id === draftJobId);
+    assert.equal(draftedTrace?.status, "awaiting_review");
+    assert.deepEqual(
+      objects(draftedTrace, "steps").map((step) => step.actor),
+      ["Teacher", "Assessment", "Assessment"],
     );
     const beforePublish = (
       await call("/student/workspace", "GET", undefined, student)
@@ -258,6 +272,20 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
       (await call(`/teacher/quizzes/${quizId}/publish`, "POST", {}, teacher))
         .status,
       200,
+    );
+    assert.equal(
+      objects(
+        (
+          await call(
+            "/teacher/workspace?classId=physics",
+            "GET",
+            undefined,
+            teacher,
+          )
+        ).body,
+        "workflows",
+      ).find((run) => run.id === draftJobId)?.status,
+      "complete",
     );
     const submitted = await call(
       `/student/quizzes/${quizId}/submit`,
@@ -274,6 +302,23 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
     assert.equal(stringField(submitted.body, "status"), "pending");
     assert.ok(!("score" in object(submitted.body)));
     const submissionId = stringField(submitted.body, "id");
+    const pendingTrace = objects(
+      (
+        await call(
+          "/teacher/workspace?classId=physics",
+          "GET",
+          undefined,
+          teacher,
+        )
+      ).body,
+      "workflows",
+    ).find((run) => run.id === submissionId);
+    assert.equal(pendingTrace?.status, "awaiting_review");
+    assert.ok(
+      !objects(pendingTrace, "steps").some(
+        (step) => step.actor === "Diagnostic",
+      ),
+    );
     assert.equal(
       (
         await call(
@@ -312,6 +357,23 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
     assert.ok(
       published.some((grade) => grade.id === submissionId && grade.score === 1),
     );
+    const reviewedTrace = objects(
+      (
+        await call(
+          "/teacher/workspace?classId=physics",
+          "GET",
+          undefined,
+          teacher,
+        )
+      ).body,
+      "workflows",
+    ).find((run) => run.id === submissionId);
+    assert.equal(reviewedTrace?.status, "complete");
+    assert.ok(
+      objects(reviewedTrace, "steps").some(
+        (step) => step.actor === "Diagnostic",
+      ),
+    );
 
     const saraGap = column(
       store,
@@ -331,6 +393,20 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
       "interventionId",
     );
     assert.equal(
+      objects(
+        (
+          await call(
+            "/teacher/workspace?classId=physics",
+            "GET",
+            undefined,
+            teacher,
+          )
+        ).body,
+        "workflows",
+      ).find((run) => run.id === explainerJob)?.status,
+      "awaiting_review",
+    );
+    assert.equal(
       (
         await call(
           `/teacher/interventions/${interventionId}/approve`,
@@ -340,6 +416,20 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
         )
       ).status,
       200,
+    );
+    assert.equal(
+      objects(
+        (
+          await call(
+            "/teacher/workspace?classId=physics",
+            "GET",
+            undefined,
+            teacher,
+          )
+        ).body,
+        "workflows",
+      ).find((run) => run.id === explainerJob)?.status,
+      "complete",
     );
     const status = () =>
       column(store, "SELECT status AS value FROM gaps WHERE id=?", [saraGap]);
@@ -395,6 +485,43 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
     );
     assert.equal(object(correct.body).correct, true);
     assert.equal(status(), "resolved");
+    const finalRuns = objects(
+      (
+        await call(
+          "/teacher/workspace?classId=physics",
+          "GET",
+          undefined,
+          teacher,
+        )
+      ).body,
+      "workflows",
+    );
+    const recheckTrace = finalRuns.find(
+      (run) =>
+        run.kind === "follow_up" &&
+        objects(run, "steps").some((step) =>
+          String(step.detail).includes("resolved"),
+        ),
+    );
+    assert.ok(recheckTrace);
+    assert.deepEqual(
+      objects(recheckTrace, "steps").map((step) => step.actor),
+      ["Student", "Content", "Diagnostic"],
+    );
+    assert.equal(
+      objects(
+        (
+          await call(
+            `/teacher/workspace?classId=${classId}`,
+            "GET",
+            undefined,
+            teacher,
+          )
+        ).body,
+        "workflows",
+      ).length,
+      0,
+    );
     assert.ok(
       Number(
         column(

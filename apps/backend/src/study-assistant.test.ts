@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   AIServiceRequestError,
   type AIServiceClient,
+  type AIStudyResponse,
   type StudyRequest,
 } from "./agents/python-service.js";
 import { startTestServer } from "../test/support.js";
@@ -14,7 +15,7 @@ class FakeAIService implements AIServiceClient {
   readonly requests: StudyRequest[] = [];
   fail = false;
 
-  study(request: StudyRequest) {
+  study(request: StudyRequest): Promise<AIStudyResponse> {
     this.requests.push(request);
     if (this.fail)
       return Promise.reject(new AIServiceRequestError("sidecar unavailable"));
@@ -31,6 +32,7 @@ class FakeAIService implements AIServiceClient {
       ],
       grounded: true,
       requiresHumanReview: false,
+      workflow: { routedTo: "study", producedBy: "study" },
     });
   }
 
@@ -96,6 +98,36 @@ describe("student Study Assistant", () => {
       );
       assert.equal(saved.status, 200);
       assert.equal((saved.body as { messages: unknown[] }).messages.length, 2);
+      const teacher = await server.login("teacher@gap.demo");
+      const workspace = await server.request(
+        "/api/teacher/workspace?classId=physics",
+        { cookie: teacher },
+      );
+      const trace = (
+        workspace.body as {
+          workflows: {
+            kind: string;
+            status: string;
+            steps: { actor: string; sources: unknown[] }[];
+          }[];
+        }
+      ).workflows.find((run) => run.kind === "study");
+      assert.ok(trace);
+      assert.equal(trace.status, "complete");
+      assert.deepEqual(
+        trace.steps.map((step) => step.actor),
+        ["Express", "Orchestrator", "Retriever", "Reviewer", "Express"],
+      );
+      assert.equal(trace.steps[2]?.sources.length, 1);
+      assert.ok(!JSON.stringify(trace).includes("Explain momentum"));
+      assert.ok(!JSON.stringify(trace).includes("Momentum equals mass"));
+      assert.ok(
+        !Object.hasOwn(
+          (await server.request("/api/student/workspace", { cookie }))
+            .body as object,
+          "workflows",
+        ),
+      );
     } finally {
       await server.close();
     }
@@ -161,6 +193,13 @@ describe("student Study Assistant", () => {
         cookie: sara,
       });
       assert.equal(deleted.status, 200);
+      assert.equal(
+        server.store.one<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM workflow_runs WHERE conversation_id=?",
+          [id],
+        )?.count,
+        0,
+      );
       assert.equal(
         (
           await server.request(`/api/student/conversations/${id}`, {
@@ -268,6 +307,11 @@ describe("student Study Assistant", () => {
           ?.id,
         "private-review-1",
       );
+      const waiting = (
+        workspace.body as { workflows: { kind: string; status: string }[] }
+      ).workflows.find((run) => run.kind === "study");
+      assert.equal(waiting?.status, "awaiting_review");
+      assert.ok(!JSON.stringify(waiting).includes("Private draft"));
       const forbidden = await server.request(
         "/api/teacher/agent-reviews/private-review-1",
         {
@@ -286,6 +330,21 @@ describe("student Study Assistant", () => {
         },
       );
       assert.equal(approved.status, 200);
+      const completed = await server.request(
+        "/api/teacher/workspace?classId=physics",
+        { cookie: teacher },
+      );
+      const reviewed = (
+        completed.body as {
+          workflows: {
+            kind: string;
+            status: string;
+            steps: { actor: string; action: string }[];
+          }[];
+        }
+      ).workflows.find((run) => run.kind === "study");
+      assert.equal(reviewed?.status, "complete");
+      assert.ok(reviewed.steps.some((step) => step.actor === "Teacher"));
       const conversation = await server.request(
         `/api/student/conversations/${id}`,
         {

@@ -3,6 +3,7 @@ import type { PendingStudyReview } from "../agents/python-service.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../errors.js";
 import { agentReviewBody } from "../validation.js";
 import { requireOwnedClass } from "./classes.js";
+import { appendWorkflowStep, workflowRunForEntity } from "./workflow-traces.js";
 
 export interface AgentReviewRow {
   id: string;
@@ -142,5 +143,36 @@ export function resolveAgentReview(
       { reviewId },
       row.student_id,
     );
+    const runId = row.message_id
+      ? workflowRunForEntity(store, "study", row.message_id)
+      : undefined;
+    if (runId) {
+      appendWorkflowStep(store, runId, {
+        actor: "Teacher",
+        action:
+          body.action === "publish"
+            ? "Approved the answer"
+            : "Rejected the answer",
+        detail:
+          body.action === "publish"
+            ? revised
+              ? "The answer was edited before sharing with the student."
+              : "The reviewed answer was shared with the student."
+            : "The private draft was not shared with the student.",
+      });
+      appendWorkflowStep(
+        store,
+        runId,
+        {
+          actor: "Express",
+          action: "Updated the student conversation",
+          detail:
+            body.action === "publish"
+              ? "The approved answer replaced the review notice."
+              : "A safe rejection notice replaced the review notice.",
+        },
+        body.action === "publish" ? "complete" : "rejected",
+      );
+    }
   });
 }

@@ -135,6 +135,8 @@ describe("PythonAIServiceClient", () => {
           ],
           grounded: true,
           requires_human_review: false,
+          routed_to: "study",
+          produced_by: "study",
         }),
       );
     });
@@ -165,6 +167,10 @@ describe("PythonAIServiceClient", () => {
     });
     assert.equal(result.sources[0]?.documentId, "syllabus");
     assert.equal(result.grounded, true);
+    assert.deepEqual(result.workflow, {
+      routedTo: "study",
+      producedBy: "study",
+    });
   });
 
   test("returns model JSON and rejects sidecar failures", async () => {

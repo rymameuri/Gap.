@@ -16,6 +16,7 @@ import {
   conversationHistory,
 } from "./conversations.js";
 import { studyAssistantBody } from "../validation.js";
+import { appendWorkflowStep, createWorkflowRun } from "./workflow-traces.js";
 
 /**
  * Ask the private course-grounded Study Agent as an enrolled student.
@@ -59,7 +60,7 @@ export async function askStudyAssistant(
       materialVersion: course.material_version,
       history,
     });
-    const { pendingReview, ...safeResponse } = response;
+    const { pendingReview, workflow, ...safeResponse } = response;
     if (safeResponse.requiresHumanReview && !pendingReview)
       throw new ServiceUnavailableError(
         "The Study Assistant could not save this item for instructor review.",
@@ -73,6 +74,61 @@ export async function askStudyAssistant(
         message,
         safeResponse,
       );
+      const runId = createWorkflowRun(store, {
+        classId,
+        kind: "study",
+        title: "Study Assistant answer",
+        studentId,
+        entityId: saved.assistantMessageId,
+        conversationId: saved.conversationId,
+        status: safeResponse.requiresHumanReview
+          ? "awaiting_review"
+          : "complete",
+      });
+      appendWorkflowStep(store, runId, {
+        actor: "Express",
+        action: "Checked access and loaded course context",
+        detail: `Used syllabus version ${String(course.material_version)} and ${String(history.length)} prior conversation messages. Stored course files were not searched.`,
+      });
+      if (workflow) {
+        appendWorkflowStep(store, runId, {
+          actor: "Orchestrator",
+          action: "Routed the request",
+          detail: `Sent to the ${workflow.routedTo} agent; response produced by ${workflow.producedBy}.`,
+        });
+      } else {
+        appendWorkflowStep(store, runId, {
+          actor: "AI service",
+          action: "Returned a response",
+          detail: "Routing details were not supplied by this service.",
+        });
+      }
+      if (safeResponse.sources.length > 0)
+        appendWorkflowStep(store, runId, {
+          actor: "Retriever",
+          action: "Returned course sources",
+          detail: `${String(safeResponse.sources.length)} source references were attached to the answer.`,
+          sources: safeResponse.sources,
+        });
+      appendWorkflowStep(store, runId, {
+        actor: "Reviewer",
+        action: safeResponse.requiresHumanReview
+          ? "Held the answer"
+          : "Cleared the answer",
+        detail: safeResponse.requiresHumanReview
+          ? "The student received a review notice; the private draft went to the teacher queue."
+          : safeResponse.grounded
+            ? "The answer passed the course-source checks."
+            : "The response was released without course citations.",
+        state: safeResponse.requiresHumanReview ? "pending" : "complete",
+      });
+      appendWorkflowStep(store, runId, {
+        actor: "Express",
+        action: safeResponse.requiresHumanReview
+          ? "Saved a review notice"
+          : "Saved the student answer",
+        detail: "The conversation is available to the student across sessions.",
+      });
       if (pendingReview)
         recordAgentReview(
           store,

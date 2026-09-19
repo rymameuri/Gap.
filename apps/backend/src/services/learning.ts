@@ -19,6 +19,11 @@ import {
 } from "../repositories/learning.js";
 import { interventionBody, questionBody, recheckBody } from "../validation.js";
 import { requireOwnedClass } from "./classes.js";
+import {
+  appendWorkflowStep,
+  createWorkflowRun,
+  workflowRunForEntity,
+} from "./workflow-traces.js";
 
 const now = (): string => new Date().toISOString();
 
@@ -60,7 +65,16 @@ export function updateIntervention(
   if (item.status !== "draft")
     throw new ConflictError("Shared explanations cannot be edited.");
   const { content } = interventionBody.parse(input);
-  updateInterventionContent(store, item.id, content);
+  store.transaction(() => {
+    updateInterventionContent(store, item.id, content);
+    const runId = workflowRunForEntity(store, "explanation", item.id);
+    if (runId)
+      appendWorkflowStep(store, runId, {
+        actor: "Teacher",
+        action: "Edited the explanation",
+        detail: "The draft was revised before sharing.",
+      });
+  });
 }
 
 /**
@@ -83,6 +97,18 @@ export function approveIntervention(
       interventionId: item.id,
       targetCount: targets.length,
     });
+    const runId = workflowRunForEntity(store, "explanation", item.id);
+    if (runId)
+      appendWorkflowStep(
+        store,
+        runId,
+        {
+          actor: "Teacher",
+          action: "Approved and shared the explanation",
+          detail: `${String(targets.length)} learning gaps were assigned this activity.`,
+        },
+        "complete",
+      );
   });
 }
 
@@ -123,8 +149,9 @@ export function recheckGap(
   const correct = answer === probe.correctAnswer;
   const status = correct ? "resolved" : "struggling";
   store.transaction(() => {
+    const probeId = randomUUID();
     insertProbe(store, {
-      id: randomUUID(),
+      id: probeId,
       gap_id: gap.id,
       student_id: studentId,
       answer,
@@ -143,6 +170,34 @@ export function recheckGap(
       studentId,
     );
     diagnose(store, gap.class_id, studentId);
+    createWorkflowRun(store, {
+      id: probeId,
+      classId: gap.class_id,
+      kind: "follow_up",
+      title: gap.topic,
+      studentId,
+      entityId: probeId,
+      status: "complete",
+    });
+    appendWorkflowStep(store, probeId, {
+      actor: "Student",
+      action: "Answered a follow-up",
+      detail: "The student responded to a teacher-approved activity.",
+    });
+    appendWorkflowStep(store, probeId, {
+      actor: "Content",
+      action: "Checked the answer",
+      detail: correct
+        ? "The answer demonstrated understanding of this follow-up."
+        : "The answer showed this topic needs more support.",
+    });
+    appendWorkflowStep(store, probeId, {
+      actor: "Diagnostic",
+      action: "Updated the learning gap",
+      detail: correct
+        ? "The gap was resolved and class priorities refreshed."
+        : "The gap was marked as struggling and class priorities refreshed.",
+    });
   });
   return {
     correct,

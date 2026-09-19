@@ -25,6 +25,11 @@ import {
   nextQueuedJob,
   requeueRunningJobs,
 } from "./repositories/activity.js";
+import {
+  appendWorkflowStep,
+  createWorkflowRun,
+  setWorkflowEntity,
+} from "./services/workflow-traces.js";
 
 const now = (): string => new Date().toISOString();
 
@@ -51,13 +56,27 @@ export class AgentQueue {
     payload: unknown,
   ): string {
     const id = randomUUID();
-    insertJob(this.store, {
-      id,
-      class_id: classId,
-      actor_id: actorId,
-      kind,
-      payload: JSON.stringify(payload),
-      now: now(),
+    this.store.transaction(() => {
+      insertJob(this.store, {
+        id,
+        class_id: classId,
+        actor_id: actorId,
+        kind,
+        payload: JSON.stringify(payload),
+        now: now(),
+      });
+      createWorkflowRun(this.store, {
+        id,
+        classId,
+        kind: kind === "assessment" ? "quiz_draft" : "explanation",
+        title: kind === "assessment" ? "Quiz draft" : "Targeted explanation",
+        jobId: id,
+      });
+      appendWorkflowStep(this.store, id, {
+        actor: "Teacher",
+        action: "Requested a draft",
+        detail: "A generation task was added to the class queue.",
+      });
     });
     this.startDrain();
     return id;
@@ -91,6 +110,11 @@ export class AgentQueue {
     try {
       const course = findClass(this.store, job.class_id);
       if (!course) throw new Error("Class is unavailable");
+      appendWorkflowStep(this.store, job.id, {
+        actor: job.kind === "assessment" ? "Assessment" : "Content",
+        action: "Started draft generation",
+        detail: `Syllabus version ${String(course.material_version)} checked. Generation mode: ${engineName() === "local" ? "local teaching bank" : "live AI"}. Uploaded course files are not indexed.`,
+      });
       // Each task marks the job succeeded in the transaction that stores its
       // output, so a restart never repeats a task whose output was saved.
       if (job.kind === "assessment") await this.draftQuiz(job, course);
@@ -107,6 +131,17 @@ export class AgentQueue {
         "agent task failed",
       );
       markJobFailed(this.store, job.id, message, now());
+      appendWorkflowStep(
+        this.store,
+        job.id,
+        {
+          actor: job.kind === "assessment" ? "Assessment" : "Content",
+          action: "Draft failed",
+          detail: "No draft was saved. The task can be retried.",
+          state: "failed",
+        },
+        "failed",
+      );
       this.store.event(
         job.class_id,
         job.kind === "assessment" ? "Assessment" : "Content",
@@ -145,6 +180,17 @@ export class AgentQueue {
         },
         null,
         job.id,
+      );
+      setWorkflowEntity(this.store, job.id, id, draft.title);
+      appendWorkflowStep(
+        this.store,
+        job.id,
+        {
+          actor: "Assessment",
+          action: "Quiz draft created",
+          detail: `${String(draft.questions.length)} questions were saved for teacher review.`,
+        },
+        "awaiting_review",
       );
       markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
     });
@@ -188,6 +234,17 @@ export class AgentQueue {
         { interventionId: id, targets: targets.length, engine: engineName() },
         null,
         job.id,
+      );
+      setWorkflowEntity(this.store, job.id, id, gap.topic);
+      appendWorkflowStep(
+        this.store,
+        job.id,
+        {
+          actor: "Content",
+          action: "Explanation draft created",
+          detail: `Prepared for ${String(targets.length)} learning gaps; teacher approval is required.`,
+        },
+        "awaiting_review",
       );
       markJobSucceeded(this.store, job.id, JSON.stringify(result), now());
     });
