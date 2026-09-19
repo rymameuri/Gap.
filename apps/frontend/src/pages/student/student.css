@@ -605,10 +605,13 @@
 }
 .s-assistant-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   min-height: 78px;
+  height: auto;
+  margin: 0;
   padding: 14px 28px;
   border-bottom: 1px solid var(--s-line);
   background: #fff;
