@@ -14,6 +14,7 @@ import { TeacherLayout } from "./layouts/workspace";
 import { StudentLayout, CourseLayout } from "./layouts/StudentLayout";
 import { Login } from "./pages/auth/Login";
 import { ClassDashboard } from "./pages/ClassDashboard";
+import { CreateClass } from "./pages/CreateClass";
 import { Landing } from "./pages/Landing";
 import {
   Overview,
@@ -100,6 +101,14 @@ createRoot(document.getElementById("root")!).render(
             element={
               <Guard role="teacher">
                 <ClassDashboard role="teacher" />
+              </Guard>
+            }
+          />
+          <Route
+            path="/teacher/classes/new"
+            element={
+              <Guard role="teacher">
+                <CreateClass />
               </Guard>
             }
           />

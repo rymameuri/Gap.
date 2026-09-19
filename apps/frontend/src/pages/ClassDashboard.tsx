@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
   Plus,
@@ -26,17 +26,17 @@ function classPath(role: "teacher" | "student", courseId: string) {
 
 export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
   const { user, logout } = useSession(),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    location = useLocation();
   const [courses, setCourses] = useState<ClassCard[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [form, setForm] = useState(false),
     [busy, setBusy] = useState(false),
-    [name, setName] = useState(""),
-    [syllabus, setSyllabus] = useState(""),
-    [importError, setImportError] = useState(""),
     [code, setCode] = useState(""),
-    [created, setCreated] = useState<ClassCard | null>(null),
+    [created, setCreated] = useState<ClassCard | null>(
+      (location.state as { created?: ClassCard } | null)?.created ?? null,
+    ),
     [invitations, setInvitations] = useState<StudentInvitation[]>([]),
     [answering, setAnswering] = useState(""),
     [accepted, setAccepted] = useState<{ id: string; name: string } | null>(
@@ -96,23 +96,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     setBusy(true);
     setError("");
     try {
-      if (role === "teacher") {
-        const result = await post<{ id: string; join_code: string }>(
-          "/teacher/classes",
-          { name: name.trim(), syllabus },
-        );
-        setCreated({
-          ...result,
-          name: name.trim(),
-          syllabus,
-          material_version: 1,
-        });
-        setName("");
-        setSyllabus("");
-        setImportError("");
-        setForm(false);
-        await load();
-      } else {
+      {
         const result = await post<{ id: string }>("/student/classes/join", {
           code: code.trim(),
         });
@@ -155,32 +139,40 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
             <div className="eyebrow">
               {role === "teacher" ? "TEACHER WORKSPACE" : "YOUR LEARNING SPACE"}
             </div>
-            {role === "teacher" ? (
-              <h1>Courses</h1>
-            ) : (
-              <h1>
-                A place for every
-                <br />
-                <em>new possibility.</em>
-              </h1>
-            )}
+            <div className="class-dash-heading-row">
+              {role === "teacher" ? (
+                <h1>Courses</h1>
+              ) : (
+                <h1>
+                  A place for every
+                  <br />
+                  <em>new possibility.</em>
+                </h1>
+              )}
+              {role === "teacher" ? (
+                <Link className="btn primary" to="/teacher/classes/new">
+                  <Plus size={17} />
+                  Create class
+                </Link>
+              ) : (
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setForm(!form);
+                    setError("");
+                  }}
+                >
+                  <Plus size={17} />
+                  Join class
+                </button>
+              )}
+            </div>
             <p>
               {role === "teacher"
                 ? "Open a course to manage materials, assessments, and student progress."
                 : "Your classes, your next steps, your next aha."}
             </p>
           </div>
-          <button
-            className="btn primary"
-            onClick={() => {
-              setForm(!form);
-              setError("");
-              setCreated(null);
-            }}
-          >
-            <Plus size={17} />
-            {role === "teacher" ? "Create class" : "Join class"}
-          </button>
         </div>
         {error && <ErrorBox message={error} />}
         {created && (
@@ -203,104 +195,25 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
         )}
         {form && (
           <section className="class-form panel" ref={formRef}>
-            <h2>
-              {role === "teacher" ? "Create a class" : "Find your classroom"}
-            </h2>
-            <p>
-              {role === "teacher"
-                ? "A unique join code will be created for your students."
-                : "Enter the eight-character code shared by your teacher."}
-            </p>
+            <h2>Find your classroom</h2>
+            <p>Enter the eight-character code shared by your teacher.</p>
             <form onSubmit={submit}>
-              {role === "teacher" ? (
-                <>
-                  <label htmlFor="new-class-name">Class name</label>
-                  <input
-                    id="new-class-name"
-                    ref={firstInputRef}
-                    required
-                    minLength={3}
-                    maxLength={150}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Introduction to Physics"
-                  />
-                  <label htmlFor="new-class-syllabus">
-                    Syllabus text <span className="muted">(optional)</span>
-                  </label>
-                  <textarea
-                    id="new-class-syllabus"
-                    value={syllabus}
-                    onChange={(e) => setSyllabus(e.target.value)}
-                    maxLength={50000}
-                    rows={6}
-                    placeholder="Paste course topics, readings, and learning objectives"
-                  />
-                  <label htmlFor="new-class-syllabus-file">
-                    Or import a syllabus (.txt)
-                  </label>
-                  <input
-                    id="new-class-syllabus-file"
-                    type="file"
-                    accept=".txt,text/plain"
-                    onChange={async (event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        if (file.size > 200_000) {
-                          setImportError(
-                            "Choose a text file smaller than 200 KB.",
-                          );
-                          return;
-                        }
-                        const content = await file.text();
-                        if (content.length > 50_000) {
-                          setImportError(
-                            "Syllabus text must be 50,000 characters or fewer.",
-                          );
-                          return;
-                        }
-                        setSyllabus(content);
-                        setImportError("");
-                      } catch {
-                        setImportError(
-                          "Could not read that file. Try another .txt file.",
-                        );
-                      } finally {
-                        event.target.value = "";
-                      }
-                    }}
-                  />
-                  {importError && <p role="alert">{importError}</p>}
-                  <p className="muted">
-                    PDF, Word, and PowerPoint files can be imported from Class
-                    materials after you create the class.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <label htmlFor="join-code">Class code</label>
-                  <input
-                    id="join-code"
-                    ref={firstInputRef}
-                    required
-                    pattern="[A-Za-z2-9]{8}"
-                    maxLength={8}
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    className="join-code-input"
-                    placeholder="ABCDEFGH"
-                    autoComplete="off"
-                  />
-                </>
-              )}
+              <label htmlFor="join-code">Class code</label>
+              <input
+                id="join-code"
+                ref={firstInputRef}
+                required
+                pattern="[A-Za-z2-9]{8}"
+                maxLength={8}
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                className="join-code-input"
+                placeholder="ABCDEFGH"
+                autoComplete="off"
+              />
               <div className="class-form-actions">
                 <button disabled={busy} className="btn primary">
-                  {busy
-                    ? "Working…"
-                    : role === "teacher"
-                      ? "Create class"
-                      : "Join class"}
+                  {busy ? "Working…" : "Join class"}
                 </button>
                 <button
                   type="button"
@@ -412,9 +325,9 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                 </div>
               </article>
             ))}
-            <button
-              className="course-add-card"
-              onClick={() => {
+            <AddCard
+              role={role}
+              onJoin={() => {
                 setForm(true);
                 setCreated(null);
               }}
@@ -430,10 +343,30 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                   ? "A join code is generated automatically."
                   : "Good things start with a code."}
               </span>
-            </button>
+            </AddCard>
           </div>
         )}
       </main>
     </div>
+  );
+}
+
+function AddCard({
+  role,
+  onJoin,
+  children,
+}: {
+  role: "teacher" | "student";
+  onJoin: () => void;
+  children: React.ReactNode;
+}) {
+  return role === "teacher" ? (
+    <Link className="course-add-card" to="/teacher/classes/new">
+      {children}
+    </Link>
+  ) : (
+    <button className="course-add-card" onClick={onJoin}>
+      {children}
+    </button>
   );
 }
