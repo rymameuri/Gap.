@@ -296,13 +296,25 @@ describe("API contract", () => {
 
     test("update class", async () => {
       const path = `/api/teacher/classes/${classId}`;
+      const renamed = await app.request(path, {
+        method: "PUT",
+        cookie: teacher,
+        body: { name: "Renamed Chemistry lab", syllabus: "" },
+      });
+      assert.equal(renamed.status, 200);
+      assert.deepEqual(
+        app.store.one("SELECT name,syllabus FROM classes WHERE id=?", [
+          classId,
+        ]),
+        { name: "Renamed Chemistry lab", syllabus: "" },
+      );
       await call("PUT /api/teacher/classes/{id}", path, {
         cookie: teacher,
         body: { name: "Chemistry lab", syllabus: "Unit 1: Reactions" },
       });
       await call("PUT /api/teacher/classes/{id}", path, {
         cookie: teacher,
-        body: { name: "Chemistry lab", syllabus: "short" },
+        body: { name: "Chemistry lab", syllabus: "x".repeat(50001) },
       });
       await call(
         "PUT /api/teacher/classes/{id}",

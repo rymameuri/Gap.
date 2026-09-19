@@ -73,7 +73,7 @@ export function TeacherLayout() {
     ["gaps", "Learning gaps", Layers],
     ["assessments", "Assessments", ClipboardList],
     ["review", "Review queue", BookOpen],
-    ["content", "Content studio", FileText],
+    ["content", "Targeted support", FileText],
     ["materials", "Class materials", FileText],
     ["activity", "Agent activity", Activity],
   ] as const;

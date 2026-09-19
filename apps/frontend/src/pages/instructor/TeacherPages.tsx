@@ -2,7 +2,6 @@ import { MaterialFileImport } from "../../components/MaterialFileImport";
 import { PriorityRationale } from "./PriorityRationale";
 import { WorkflowTimeline } from "./WorkflowTimeline";
 import { CourseFiles } from "../../components/CourseFiles";
-import { RosterImport } from "../../components/RosterImport";
 import { LearningCharts } from "../../components/LearningCharts";
 import {
   Users,
@@ -353,7 +352,12 @@ export function Assessments() {
       async () => {
         await put("/teacher/quizzes/" + draft.id, {
           title: draft.title,
-          questions: draft.questions,
+          questions: draft.questions.map((question) => ({
+            ...question,
+            keywords: question.keywords
+              ?.map((keyword) => keyword.trim())
+              .filter(Boolean),
+          })),
         });
         if (publish) await post("/teacher/quizzes/" + draft.id + "/publish");
         await refresh();
@@ -507,6 +511,32 @@ export function Assessments() {
                       <option key={o}>{o}</option>
                     ))}
                   </select>
+                </>
+              )}
+              {q.kind === "text" && (
+                <>
+                  <label className="field" htmlFor={"answer-" + q.id}>
+                    Expected answer
+                  </label>
+                  <textarea
+                    id={"answer-" + q.id}
+                    value={q.correctAnswer ?? ""}
+                    onChange={(e) =>
+                      updateQuestion(q.id, { correctAnswer: e.target.value })
+                    }
+                  />
+                  <label className="field" htmlFor={"keywords-" + q.id}>
+                    Grading keywords (one per line)
+                  </label>
+                  <textarea
+                    id={"keywords-" + q.id}
+                    value={(q.keywords ?? []).join("\n")}
+                    onChange={(e) =>
+                      updateQuestion(q.id, {
+                        keywords: e.target.value.split("\n"),
+                      })
+                    }
+                  />
                 </>
               )}
               <label className="field" htmlFor={"rubric-" + q.id}>
@@ -867,14 +897,13 @@ export function ContentStudio() {
   );
 }
 export function Materials() {
-  const { data, refresh, selectClass } = useTeacher(),
-    action = useAction(),
-    notice = useNotice();
+  const { data, refresh } = useTeacher();
+  const action = useAction();
   const [name, setName] = useState(data.course.name),
     [syllabus, setSyllabus] = useState(data.course.syllabus),
-    [newName, setNewName] = useState(""),
-    [email, setEmail] = useState(""),
     [importing, setImporting] = useState(false);
+  const syllabusChanged = syllabus !== data.course.syllabus;
+  const nameChanged = name.trim() !== data.course.name;
   useEffect(() => {
     setName(data.course.name);
     setSyllabus(data.course.syllabus);
@@ -883,37 +912,39 @@ export function Materials() {
   return (
     <>
       <Title
-        label="CLASS SETUP"
+        label="COURSE SOURCES"
         heading="Class materials"
-        description="Ground assessments and explanations in your syllabus."
+        description="Keep the syllabus used by AI and the files shared with students up to date."
       />
       {action.error && <ErrorBox message={action.error} />}
-      <section className="panel">
+      <section className="material-section" aria-labelledby="syllabus-heading">
+        <div className="material-section-heading">
+          <div>
+            <h2 id="syllabus-heading">Syllabus</h2>
+            <p>
+              Used to ground Study Assistant answers and generated teaching
+              content.
+            </p>
+          </div>
+          <span className="material-version">
+            Version {data.course.material_version}
+          </span>
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (importing) return;
+            if (importing || !syllabusChanged) return;
             void action.run(async () => {
               await put("/teacher/classes/" + data.course.id, {
-                name,
+                name: data.course.name,
                 syllabus,
               });
               await refresh();
-            }, "Class materials saved.");
+            }, "Syllabus saved.");
           }}
         >
-          <label className="field" htmlFor="course-name">
-            Course name
-          </label>
-          <input
-            id="course-name"
-            required
-            minLength={3}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
           <label className="field" htmlFor="syllabus">
-            Syllabus
+            Syllabus text
           </label>
           <textarea
             id="syllabus"
@@ -921,7 +952,6 @@ export function Materials() {
             minLength={10}
             maxLength={50000}
             disabled={importing || action.busy}
-            style={{ minHeight: 190 }}
             value={syllabus}
             onChange={(e) => setSyllabus(e.target.value)}
           />
@@ -932,176 +962,59 @@ export function Materials() {
             onText={setSyllabus}
             onBusyChange={setImporting}
           />
-          <p className="muted">
-            Material version {data.course.material_version}.
-          </p>
           <div className="actions">
-            <button className="btn primary" disabled={action.busy || importing}>
-              Save materials
+            <button
+              className="btn primary"
+              disabled={action.busy || importing || !syllabusChanged}
+            >
+              Save syllabus
             </button>
+            {syllabusChanged && (
+              <button
+                className="btn"
+                type="button"
+                disabled={action.busy || importing}
+                onClick={() => setSyllabus(data.course.syllabus)}
+              >
+                Discard changes
+              </button>
+            )}
           </div>
         </form>
       </section>
       <CourseFiles courseId={data.course.id} canManage />
-      <section className="panel">
-        <h2>Class roster</h2>
+      <details className="course-settings">
+        <summary>Course settings</summary>
         <form
-          className="actions"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!nameChanged) return;
             void action.run(async () => {
-              await post("/teacher/classes/" + data.course.id + "/enroll", {
-                email,
+              await put("/teacher/classes/" + data.course.id, {
+                name: name.trim(),
+                syllabus: data.course.syllabus,
               });
-              setEmail("");
               await refresh();
-            }, "Student enrolled.");
+            }, "Course name updated.");
           }}
         >
-          <label className="sr-only" htmlFor="enroll-email">
-            Student email
+          <label className="field" htmlFor="course-name">
+            Course name
           </label>
-          <input
-            id="enroll-email"
-            type="email"
-            required
-            placeholder="Existing student account email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ maxWidth: 360 }}
-          />
-          <button className="btn" disabled={action.busy}>
-            Enroll student
-          </button>
+          <div className="course-name-row">
+            <input
+              id="course-name"
+              required
+              minLength={3}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button className="btn" disabled={action.busy || !nameChanged}>
+              Save name
+            </button>
+          </div>
         </form>
-        <RosterImport
-          key={data.course.id}
-          courseId={data.course.id}
-          onInvited={async (invited) => {
-            await refresh();
-            notice(
-              invited === 1
-                ? "1 invitation sent."
-                : invited + " invitations sent.",
-            );
-          }}
-        />
-        {data.invitations.length > 0 && (
-          <>
-            <h3>Invitations</h3>
-            <div className="tablewrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Status</th>
-                    <th>
-                      <span className="sr-only">Action</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.invitations.map((invitation) => (
-                    <tr key={invitation.id}>
-                      <td>
-                        {invitation.name && <strong>{invitation.name}</strong>}
-                        <div className="muted">{invitation.email}</div>
-                      </td>
-                      <td>
-                        <span
-                          className={
-                            "badge " +
-                            (invitation.status === "pending" ? "sent" : "open")
-                          }
-                        >
-                          {invitation.status === "pending"
-                            ? "Pending"
-                            : "Declined"}
-                        </span>
-                      </td>
-                      <td>
-                        {invitation.status === "pending" && (
-                          <button
-                            className="btn small"
-                            disabled={action.busy}
-                            onClick={() =>
-                              void action.run(async () => {
-                                await post(
-                                  "/teacher/invitations/" +
-                                    invitation.id +
-                                    "/revoke",
-                                );
-                                await refresh();
-                              }, "Invitation revoked.")
-                            }
-                          >
-                            Revoke
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <h3>Enrolled students</h3>
-          </>
-        )}
-        <div className="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Email</th>
-                <th>Open gaps</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.roster.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.name}</td>
-                  <td>{s.email}</td>
-                  <td>{s.open_gaps}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <section className="panel">
-        <h2>Create another class</h2>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void action.run(async () => {
-              const result = await post<{ id: string }>("/teacher/classes", {
-                name: newName,
-                syllabus,
-              });
-              selectClass(result.id);
-              setNewName("");
-            }, "Class created. Enroll students to begin.");
-          }}
-        >
-          <label className="field" htmlFor="new-class">
-            Class name
-          </label>
-          <input
-            id="new-class"
-            minLength={3}
-            required
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <p className="muted">
-            Uses the syllabus entered above. No students are enrolled
-            automatically.
-          </p>
-          <button className="btn" disabled={action.busy}>
-            Create class
-          </button>
-        </form>
-      </section>
+      </details>
     </>
   );
 }

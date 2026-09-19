@@ -15,7 +15,7 @@ export const createClassBody = z.object({
 
 export const updateClassBody = z.object({
   name: z.string().min(3).max(150),
-  syllabus: z.string().min(10).max(50000),
+  syllabus: z.string().max(50000),
 });
 
 export const enrollBody = z.object({ email: z.string().email() });

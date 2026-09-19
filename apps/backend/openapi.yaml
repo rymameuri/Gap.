@@ -219,7 +219,7 @@ paths:
               required: [name, syllabus]
               properties:
                 name: { type: string, minLength: 3, maxLength: 150 }
-                syllabus: { type: string, minLength: 10, maxLength: 50000 }
+                syllabus: { type: string, maxLength: 50000 }
       responses:
         "200":
           description: Name and syllabus saved; material_version incremented.
