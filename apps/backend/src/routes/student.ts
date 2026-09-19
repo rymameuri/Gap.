@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import type { Express } from "express";
 import { studentOnly } from "../auth.js";
 import { JOIN_ATTEMPTS_PER_WINDOW } from "../constants.js";
@@ -11,7 +12,10 @@ import {
 import { askQuestion, recheckGap } from "../services/learning.js";
 import { studentWorkspace } from "../services/workspaces.js";
 import { publishedPresentations } from "../services/presentations.js";
-import { askStudyAssistant } from "../services/study-assistant.js";
+import {
+  askStudyAssistant,
+  streamStudyAssistant,
+} from "../services/study-assistant.js";
 import {
   deleteConversation,
   getConversation,
@@ -87,15 +91,58 @@ export function registerStudentRoutes(
     "/api/student/classes/:id/assistant",
     studentOnly,
     asyncRoute(async (req, res) => {
-      res.json(
-        await askStudyAssistant(
+      const wantsStream = req.get("accept")?.includes("application/x-ndjson");
+
+      if (!wantsStream) {
+        res.json(
+          await askStudyAssistant(
+            store,
+            aiService,
+            req.user.id,
+            param(req, "id"),
+            req.body,
+          ),
+        );
+        return;
+      }
+
+      let started = false;
+
+      const write = async (payload: unknown): Promise<void> => {
+        if (res.destroyed) return;
+
+        if (!started) {
+          res.status(200);
+          res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+          res.setHeader("Cache-Control", "no-cache, no-transform");
+          res.setHeader("X-Accel-Buffering", "no");
+          res.flushHeaders();
+          started = true;
+        }
+
+        if (!res.write(JSON.stringify(payload) + "\n"))
+          await once(res, "drain");
+      };
+
+      try {
+        const response = await streamStudyAssistant(
           store,
           aiService,
           req.user.id,
           param(req, "id"),
           req.body,
-        ),
-      );
+          write,
+        );
+        await write({ type: "complete", response });
+        res.end();
+      } catch (error) {
+        if (!res.headersSent) throw error;
+        await write({
+          type: "error",
+          message: "The Study Assistant is not available right now.",
+        });
+        res.end();
+      }
     }),
   );
 

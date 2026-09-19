@@ -125,6 +125,14 @@ class CourseDocumentInput(BaseModel):
     file_path: str = Field(min_length=1)
 
 
+class CourseTextInput(BaseModel):
+    """Trusted extracted text for one backend-managed course document."""
+
+    document_id: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=300)
+    text: str = Field(min_length=1, max_length=50_000)
+
+
 class CourseIndexResult(BaseModel):
     """Summary returned after replacing a course search index."""
 

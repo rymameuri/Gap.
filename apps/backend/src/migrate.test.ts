@@ -14,6 +14,7 @@ import {
 import {
   MIGRATIONS,
   learningRecords,
+  courseFileIndex,
   workflowTraces,
   type Migration,
 } from "./migrations/index.js";
@@ -318,16 +319,27 @@ test("adopts early workflow traces after installing class invitations", async ()
 });
 
 describe("persistence", () => {
-  for (const branch of ["main", "rymedits"] as const)
+  for (const branch of [
+    "main",
+    "main-with-files",
+    "rymedits",
+    "merged-instructor-tools",
+  ] as const)
     test(`upgrades the released ${branch} schema without losing data`, async () => {
       const store = await blank();
       const released =
         branch === "main"
           ? [...MIGRATIONS.slice(0, 6), workflowTraces]
-          : MIGRATIONS.filter((item) => item !== workflowTraces);
+          : branch === "main-with-files"
+            ? [...MIGRATIONS.slice(0, 6), workflowTraces, courseFileIndex]
+            : branch === "rymedits"
+              ? MIGRATIONS.filter(
+                  (item) => item !== workflowTraces && item !== courseFileIndex,
+                )
+              : MIGRATIONS.filter((item) => item !== courseFileIndex);
       migrate(store, released);
       seed(store, "demo-password");
-      if (branch === "main")
+      if (branch.startsWith("main"))
         store.run(
           "INSERT INTO workflow_runs(id,class_id,kind,title,status,created_at,updated_at) VALUES('retained-run','physics','study','Retained run','complete','2026-09-19','2026-09-19')",
         );
@@ -340,7 +352,7 @@ describe("persistence", () => {
       assert.ok(store.one("SELECT 1 FROM classes WHERE id='physics'"));
       assert.ok(
         store.one(
-          branch === "main"
+          branch.startsWith("main")
             ? "SELECT 1 FROM workflow_runs WHERE id='retained-run'"
             : "SELECT 1 FROM sources WHERE id='retained-source'",
         ),

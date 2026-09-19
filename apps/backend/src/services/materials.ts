@@ -28,6 +28,14 @@ interface CourseFileRow extends CourseFileSummary {
   content: Uint8Array;
 }
 
+export interface CourseFileForAI {
+  id: string;
+  filename: string;
+  content: Uint8Array;
+  status: "stored" | "indexed" | "failed";
+  extracted_text: string | null;
+}
+
 function fileType(filename: string, bytes: Uint8Array): string {
   const extension = filename.split(".").at(-1)?.toLowerCase();
   if (extension === "txt") {
@@ -126,6 +134,10 @@ export function uploadCourseFile(
         file.created_at,
       ],
     );
+    store.run(
+      "UPDATE classes SET material_version=material_version+1 WHERE id=?",
+      [classId],
+    );
     store.event(classId, "Teacher", "Course file stored", {
       fileId: file.id,
       filename,
@@ -167,9 +179,45 @@ export function deleteCourseFile(
   if (!file) throw new NotFoundError("Course file not found.");
   store.transaction(() => {
     store.run("DELETE FROM course_files WHERE id=?", [fileId]);
+    store.run(
+      "UPDATE classes SET material_version=material_version+1 WHERE id=?",
+      [classId],
+    );
     store.event(classId, "Teacher", "Course file deleted", {
       fileId,
       filename: file.filename,
     });
   });
+}
+
+export function courseFilesForAI(
+  store: Store,
+  classId: string,
+): CourseFileForAI[] {
+  return store.all<CourseFileForAI>(
+    `SELECT f.id,f.filename,f.content,f.status,t.text AS extracted_text
+     FROM course_files f
+     LEFT JOIN course_file_text t ON t.file_id=f.id
+     WHERE f.class_id=?
+     ORDER BY f.created_at ASC,f.id ASC`,
+    [classId],
+  );
+}
+
+export function saveCourseFileText(
+  store: Store,
+  fileId: string,
+  text: string,
+): void {
+  store.transaction(() => {
+    store.run(
+      "INSERT OR REPLACE INTO course_file_text(file_id,text) VALUES(?,?)",
+      [fileId, text],
+    );
+    store.run("UPDATE course_files SET status='indexed' WHERE id=?", [fileId]);
+  });
+}
+
+export function failCourseFileIndex(store: Store, fileId: string): void {
+  store.run("UPDATE course_files SET status='failed' WHERE id=?", [fileId]);
 }

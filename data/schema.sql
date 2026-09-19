@@ -77,6 +77,11 @@ CREATE TABLE conversations(
       updated_at TEXT NOT NULL
     );
 
+CREATE TABLE course_file_text(
+      file_id TEXT PRIMARY KEY REFERENCES course_files(id) ON DELETE CASCADE,
+      text TEXT NOT NULL
+    );
+
 CREATE TABLE course_files(
       id TEXT PRIMARY KEY,
       class_id TEXT NOT NULL REFERENCES classes(id),

@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -49,6 +50,29 @@ class FakeService:
                 ],
                 metadata={"grounded": True},
             ),
+        )
+
+
+class FakeStreamingService(FakeService):
+    async def stream_study(self, request: AgentRequest, on_delta):
+        self.requests.append(request)
+        await on_delta("Momentum equals ")
+        await on_delta("mass times velocity [S1].")
+        return AgentResult(
+            agent=AgentName.STUDY,
+            content="Momentum equals mass times velocity [S1].",
+            sources=[
+                SourceReference(
+                    document_id="syllabus",
+                    title="Physics syllabus",
+                    page=1,
+                    chunk_id="chunk-1",
+                )
+            ],
+            metadata={
+                "grounded": True,
+                "used_source_ids": ["S1"],
+            },
         )
 
 
@@ -210,6 +234,32 @@ def test_private_review_payload_is_handed_to_backend_without_publishing_it() -> 
         "issues": ["Needs teacher review."],
     }
 
+
+
+def test_study_stream_emits_status_deltas_and_final_response() -> None:
+    service = FakeStreamingService()
+    app = create_app(service=service, internal_token=TOKEN)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/study/stream",
+            headers=headers(),
+            json=study_body(),
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [json.loads(line) for line in response.text.strip().splitlines()]
+    assert [event["type"] for event in events] == [
+        "status",
+        "delta",
+        "delta",
+        "complete",
+    ]
+    assert events[1]["text"] == "Momentum equals "
+    assert events[-1]["response"]["grounded"] is True
+    assert events[-1]["response"]["requires_human_review"] is False
+    assert len(service.requests) == 1
 
 def test_model_json_uses_guarded_prompt_and_returns_object() -> None:
     model = FakeModelClient("Result:\n```json\n{\"ok\": true}\n```")

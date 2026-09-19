@@ -10,6 +10,12 @@ export interface StudyMessage {
   readonly content: string;
 }
 
+export interface StudyDocument {
+  readonly documentId: string;
+  readonly title: string;
+  readonly text: string;
+}
+
 export interface StudyRequest {
   readonly userId: string;
   readonly courseId: string;
@@ -17,6 +23,7 @@ export interface StudyRequest {
   readonly courseTitle: string;
   readonly syllabus: string;
   readonly materialVersion: number;
+  readonly documents?: readonly StudyDocument[];
   readonly history: readonly StudyMessage[];
 }
 
@@ -34,6 +41,10 @@ export interface StudyResponse {
   readonly grounded: boolean;
   readonly requiresHumanReview: boolean;
 }
+
+export type StudyStreamUpdate =
+  | { readonly type: "status"; readonly message: string }
+  | { readonly type: "delta"; readonly text: string };
 
 export type StudyWorkflowAgent =
   "orchestrator" | "study" | "assessment" | "diagnostic" | "reviewer";
@@ -93,6 +104,10 @@ export interface AIServiceClient {
     content: Uint8Array,
   ): Promise<DocumentImportResult>;
   study(request: StudyRequest): Promise<AIStudyResponse>;
+  studyStream?(
+    request: StudyRequest,
+    onUpdate: (update: StudyStreamUpdate) => void | Promise<void>,
+  ): Promise<AIStudyResponse>;
   modelJSON(instructions: string, data: unknown): Promise<unknown>;
 }
 
@@ -133,6 +148,13 @@ const internalStudyResponse = z.object({
     .optional(),
 });
 
+const internalStudyStreamEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("status"), message: z.string().min(1) }),
+  z.object({ type: z.literal("delta"), text: z.string().min(1) }),
+  z.object({ type: z.literal("complete"), response: internalStudyResponse }),
+  z.object({ type: z.literal("error"), message: z.string().min(1) }),
+]);
+
 const internalModelResponse = z.object({
   result: z.record(z.unknown()),
 });
@@ -148,17 +170,135 @@ export class PythonAIServiceClient implements AIServiceClient {
 
   async study(request: StudyRequest): Promise<AIStudyResponse> {
     const response = internalStudyResponse.parse(
-      await this.#post("/v1/study", {
-        user_id: request.userId,
-        course_id: request.courseId,
-        message: request.message,
-        course_title: request.courseTitle,
-        syllabus: request.syllabus,
-        material_version: request.materialVersion,
-        history: request.history,
-      }),
+      await this.#post("/v1/study", this.#studyBody(request)),
     );
 
+    return this.#studyResponse(response);
+  }
+
+  async studyStream(
+    request: StudyRequest,
+    onUpdate: (update: StudyStreamUpdate) => void | Promise<void>,
+  ): Promise<AIStudyResponse> {
+    let response: Response;
+
+    try {
+      response = await fetch(this.#baseUrl + "/v1/study/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Manara-AI-Token": this.#token,
+        },
+        body: JSON.stringify(this.#studyBody(request)),
+        signal: AbortSignal.timeout(45_000),
+      });
+    } catch {
+      throw new AIServiceRequestError(
+        "The AI service is unavailable. Please try again.",
+      );
+    }
+
+    if (!response.ok)
+      throw new AIServiceRequestError(
+        `The AI service is unavailable (${String(response.status)}).`,
+      );
+
+    if (response.body === null)
+      throw new AIServiceRequestError(
+        "The AI service returned an empty stream.",
+      );
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let completed: AIStudyResponse | undefined;
+
+    const consumeLine = async (line: string): Promise<void> => {
+      if (!line.trim()) return;
+
+      let event: z.infer<typeof internalStudyStreamEvent>;
+      try {
+        event = internalStudyStreamEvent.parse(JSON.parse(line));
+      } catch {
+        throw new AIServiceRequestError(
+          "The AI service returned an invalid stream event.",
+        );
+      }
+
+      if (event.type === "status") {
+        await onUpdate({ type: "status", message: event.message });
+        return;
+      }
+
+      if (event.type === "delta") {
+        await onUpdate({ type: "delta", text: event.text });
+        return;
+      }
+
+      if (event.type === "error")
+        throw new AIServiceRequestError(event.message);
+
+      completed = this.#studyResponse(event.response);
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+
+        if (buffer.length > 100_000)
+          throw new AIServiceRequestError(
+            "The AI service returned an oversized stream event.",
+          );
+
+        let boundary = buffer.indexOf("\n");
+        while (boundary !== -1) {
+          const line = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 1);
+          await consumeLine(line);
+          boundary = buffer.indexOf("\n");
+        }
+
+        if (done) break;
+      }
+
+      if (buffer.trim()) await consumeLine(buffer);
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (completed === undefined)
+      throw new AIServiceRequestError(
+        "The AI service ended the stream before completing the answer.",
+      );
+
+    return completed;
+  }
+
+  #studyBody(request: StudyRequest): Record<string, unknown> {
+    return {
+      user_id: request.userId,
+      course_id: request.courseId,
+      message: request.message,
+      course_title: request.courseTitle,
+      syllabus: request.syllabus,
+      material_version: request.materialVersion,
+      ...(request.documents === undefined
+        ? {}
+        : {
+            documents: request.documents.map((document) => ({
+              document_id: document.documentId,
+              title: document.title,
+              text: document.text,
+            })),
+          }),
+      history: request.history,
+    };
+  }
+
+  #studyResponse(
+    response: z.infer<typeof internalStudyResponse>,
+  ): AIStudyResponse {
     const source = (item: z.infer<typeof internalSource>): StudySource => ({
       documentId: item.document_id,
       title: item.title,
@@ -166,6 +306,7 @@ export class PythonAIServiceClient implements AIServiceClient {
       slide: item.slide,
       chunkId: item.chunk_id,
     });
+
     return {
       content: response.content,
       sources: response.sources.map(source),

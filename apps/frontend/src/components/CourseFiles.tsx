@@ -13,10 +13,12 @@ export function CourseFiles({
   const [files, setFiles] = useState<CourseFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   useEffect(() => {
     let cancelled = false;
     setFiles([]);
     setError("");
+    setNotice("");
     void api<{ files: CourseFile[] }>(
       `/classes/${encodeURIComponent(courseId)}/files`,
     )
@@ -36,28 +38,36 @@ export function CourseFiles({
     };
   }, [courseId]);
 
-  async function upload(file: File) {
+  async function upload(selected: File[]) {
     setError("");
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Stored files must be 5 MB or smaller.");
+    setNotice("");
+    const oversized = selected.find((file) => file.size > 5 * 1024 * 1024);
+    if (oversized) {
+      setError(`${oversized.name} is larger than the 5 MB file limit.`);
       return;
     }
     setBusy(true);
     try {
-      const created = await api<CourseFile>(
-        `/teacher/classes/${encodeURIComponent(courseId)}/files?filename=${encodeURIComponent(file.name)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: file,
-        },
+      for (const [index, file] of selected.entries()) {
+        setNotice(`Uploading ${index + 1} of ${selected.length}: ${file.name}`);
+        const created = await api<CourseFile>(
+          `/teacher/classes/${encodeURIComponent(courseId)}/files?filename=${encodeURIComponent(file.name)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: file,
+          },
+        );
+        setFiles((current) => [created, ...current]);
+      }
+      setNotice(
+        `${selected.length} ${selected.length === 1 ? "file" : "files"} uploaded. The Study Assistant will read them with the syllabus.`,
       );
-      setFiles((current) => [created, ...current]);
     } catch (reason) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The file could not be stored.",
+          : "The files could not be stored.",
       );
     } finally {
       setBusy(false);
@@ -67,6 +77,7 @@ export function CourseFiles({
   async function remove(id: string) {
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       await api(
         `/teacher/classes/${encodeURIComponent(courseId)}/files/${encodeURIComponent(id)}`,
@@ -93,28 +104,31 @@ export function CourseFiles({
           <h2>Course files</h2>
           {canManage && (
             <p>
-              Files are available to students. AI indexing is not connected yet.
+              Upload lecture files together. The Study Assistant reads the
+              syllabus and every stored course file before it answers.
             </p>
           )}
         </div>
         {canManage && (
           <label className="btn" htmlFor="course-file-upload">
-            <Upload size={16} /> Store file
+            <Upload size={16} /> Store files
             <input
               id="course-file-upload"
               className="sr-only"
               type="file"
               accept=".txt,.pdf,.docx,.pptx"
+              multiple
               disabled={busy}
               onChange={(event) => {
-                const file = event.target.files?.[0];
+                const selected = Array.from(event.target.files ?? []);
                 event.target.value = "";
-                if (file) void upload(file);
+                if (selected.length > 0) void upload(selected);
               }}
             />
           </label>
         )}
       </div>
+      {notice && <p className="muted" role="status">{notice}</p>}
       {error && (
         <p className="error-box" role="alert">
           {error}

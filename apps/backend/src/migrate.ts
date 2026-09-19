@@ -8,7 +8,7 @@ import {
   classInvitations,
   gapResolutions,
   learningRecords,
-  sources,
+  courseFileIndex,
   workflowTraces,
   type Migration,
 } from "./migrations/index.js";
@@ -179,22 +179,34 @@ export interface MigrationResult {
   readonly applied: readonly string[];
 }
 
-// The two released branches added independent 0007 migrations. Fill only
+// The released branches added independent 0007/0008 migrations. Fill only
 // their exact known histories; unknown or damaged ledgers still fail closed.
 function reconcileMergedBranches(store: Store): string[] {
   const done = appliedMigrations(store);
-  const main = [...MIGRATIONS.slice(0, 6), workflowTraces];
-  const rymedits = MIGRATIONS.filter((item) => item !== workflowTraces);
-  const fromMain = done.join("\n") === main.map((item) => item.id).join("\n");
-  const fromRymedits =
-    done.length > 7 &&
-    done.length <= rymedits.length &&
-    done.every((id, index) => rymedits[index]?.id === id);
-  const missing = fromMain ? sources : fromRymedits ? workflowTraces : null;
-  if (!missing) return [];
-  missing.up(store);
-  record(store, missing.id);
-  return [missing.id];
+  const histories = [
+    [...MIGRATIONS.slice(0, 6), workflowTraces, courseFileIndex],
+    MIGRATIONS.filter(
+      (item) => item !== workflowTraces && item !== courseFileIndex,
+    ),
+    MIGRATIONS.filter((item) => item !== courseFileIndex),
+  ];
+  const known =
+    done.length > 6 &&
+    histories.some(
+      (history) =>
+        done.length <= history.length &&
+        done.every((id, index) => history[index]?.id === id),
+    );
+  if (!known) return [];
+  const last = MIGRATIONS.findIndex((item) => item.id === done.at(-1));
+  const missing = MIGRATIONS.slice(0, last + 1).filter(
+    (item) => !done.includes(item.id),
+  );
+  for (const migration of missing) {
+    migration.up(store);
+    record(store, migration.id);
+  }
+  return missing.map((item) => item.id);
 }
 
 /**

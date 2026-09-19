@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
+from contextlib import suppress
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 
 from app.ai.rag.document_import import (
     MAX_UPLOAD_BYTES, DocumentImportError, ImportedDocument, extract_document,
@@ -23,6 +26,7 @@ from app.ai.schemas.models import (
     AgentRequest,
     AgentName,
     ChatMessage,
+    CourseTextInput,
     HumanReviewItem,
     SourceReference,
     UserRole,
@@ -45,6 +49,14 @@ class SharedAIService(Protocol):
     ) -> Any:
         ...
 
+    def replace_course_texts(
+        self,
+        *,
+        course_id: str,
+        documents: Sequence[CourseTextInput],
+    ) -> Any:
+        ...
+
     async def run(self, request: AgentRequest) -> WorkflowResponse:
         ...
 
@@ -59,6 +71,7 @@ class StudyRequest(BaseModel):
     course_title: str = Field(min_length=1, max_length=300)
     syllabus: str = Field(min_length=1, max_length=50_000)
     material_version: int = Field(ge=1)
+    documents: list[CourseTextInput] = Field(default_factory=list, max_length=20)
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
 
 
@@ -148,7 +161,82 @@ def create_app(
             "AI_INTERNAL_TOKEN must contain at least 32 characters."
         )
 
-    indexed_versions: dict[str, int] = {}
+    indexed_versions: dict[str, tuple[int, tuple[str, ...]]] = {}
+
+    def ensure_course_index(request: StudyRequest) -> None:
+        document_ids = tuple(document.document_id for document in request.documents)
+        index_key = (request.material_version, document_ids)
+        if indexed_versions.get(request.course_id) == index_key:
+            return
+
+        if not request.documents:
+            shared_service.replace_course_text(
+                course_id=request.course_id,
+                document_id="syllabus",
+                title=f"{request.course_title} syllabus",
+                text=request.syllabus,
+            )
+        else:
+            documents = [
+                CourseTextInput(
+                    document_id="syllabus",
+                    title=f"{request.course_title} syllabus",
+                    text=request.syllabus,
+                ),
+                *request.documents,
+            ]
+            shared_service.replace_course_texts(
+                course_id=request.course_id,
+                documents=documents,
+            )
+        indexed_versions[request.course_id] = index_key
+
+    def study_agent_request(request: StudyRequest) -> AgentRequest:
+        return AgentRequest(
+            user_id=request.user_id,
+            course_id=request.course_id,
+            role=UserRole.STUDENT,
+            message=request.message,
+            history=request.history,
+            metadata={
+                "material_version": request.material_version,
+                "source": "express_backend",
+                "channel": "study_assistant",
+            },
+        )
+
+    def build_study_response(
+        result: Any,
+        *,
+        routed_to: AgentName | None = None,
+    ) -> StudyResponse:
+        pending_review = None
+        review_id = result.metadata.get("review_id")
+        if result.requires_human_review and isinstance(review_id, str):
+            item = shared_service.take_review_item(review_id)
+            pending_review = PendingStudyReview(
+                id=item.review_id,
+                content=item.result.content,
+                sources=item.result.sources,
+                issues=item.issues,
+            )
+
+        return StudyResponse(
+            content=result.content,
+            sources=result.sources,
+            grounded=bool(result.metadata.get("grounded", False)),
+            requires_human_review=result.requires_human_review,
+            pending_review=pending_review,
+            routed_to=routed_to or result.agent,
+            produced_by=result.agent,
+        )
+
+    def stream_line(payload: Mapping[str, Any]) -> str:
+        return json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ) + "\n"
 
     async def authorize(
         supplied_token: str | None = Header(
@@ -209,50 +297,93 @@ def create_app(
         request: StudyRequest,
         _: None = Depends(authorize),
     ) -> StudyResponse:
-        if indexed_versions.get(request.course_id) != request.material_version:
-            shared_service.replace_course_text(
-                course_id=request.course_id,
-                document_id="syllabus",
-                title=f"{request.course_title} syllabus",
-                text=request.syllabus,
-            )
-            indexed_versions[request.course_id] = request.material_version
-
-        response = await shared_service.run(
-            AgentRequest(
-                user_id=request.user_id,
-                course_id=request.course_id,
-                role=UserRole.STUDENT,
-                message=request.message,
-                history=request.history,
-                metadata={
-                    "material_version": request.material_version,
-                    "source": "express_backend",
-                    "channel": "study_assistant",
-                },
-            )
-        )
-        result = response.result
-
-        pending_review = None
-        review_id = result.metadata.get("review_id")
-        if result.requires_human_review and isinstance(review_id, str):
-            item = shared_service.take_review_item(review_id)
-            pending_review = PendingStudyReview(
-                id=item.review_id,
-                content=item.result.content,
-                sources=item.result.sources,
-                issues=item.issues,
-            )
-
-        return StudyResponse(
-            content=result.content,
-            sources=result.sources,
-            grounded=bool(result.metadata.get("grounded", False)),
-            requires_human_review=result.requires_human_review,
-            pending_review=pending_review,
+        ensure_course_index(request)
+        response = await shared_service.run(study_agent_request(request))
+        return build_study_response(
+            response.result,
             routed_to=response.route.target_agent,
-            produced_by=result.agent,
+        )
+
+    @app.post("/v1/study/stream")
+    async def study_stream(
+        request: StudyRequest,
+        _: None = Depends(authorize),
+    ) -> StreamingResponse:
+        ensure_course_index(request)
+        agent_request = study_agent_request(request)
+
+        async def events():
+            queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=32)
+
+            async def on_delta(text: str) -> None:
+                if text:
+                    await queue.put(stream_line({"type": "delta", "text": text}))
+
+            async def produce() -> None:
+                try:
+                    stream_method = getattr(shared_service, "stream_study", None)
+                    routed_to = None
+                    if callable(stream_method):
+                        result = await stream_method(agent_request, on_delta)
+                    else:
+                        workflow_response = await shared_service.run(agent_request)
+                        result = workflow_response.result
+                        routed_to = workflow_response.route.target_agent
+
+                    response = build_study_response(
+                        result,
+                        routed_to=routed_to,
+                    )
+                    await queue.put(
+                        stream_line(
+                            {
+                                "type": "complete",
+                                "response": response.model_dump(mode="json"),
+                            }
+                        )
+                    )
+                except Exception:
+                    await queue.put(
+                        stream_line(
+                            {
+                                "type": "error",
+                                "message": (
+                                    "The Study Assistant is not available "
+                                    "right now."
+                                ),
+                            }
+                        )
+                    )
+                finally:
+                    await queue.put(None)
+
+            yield stream_line(
+                {
+                    "type": "status",
+                    "message": "Reading course material...",
+                }
+            )
+            producer = asyncio.create_task(produce())
+
+            try:
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    yield item
+            finally:
+                if not producer.done():
+                    producer.cancel()
+                with suppress(asyncio.CancelledError):
+                    await producer
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+            },
         )
 
     @app.post("/v1/model-json", response_model=ModelJSONResponse)

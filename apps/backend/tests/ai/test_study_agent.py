@@ -69,6 +69,29 @@ class FakeLLMClient:
         return SimpleNamespace(text=self.response_text)
 
 
+
+class FakeStreamingLLMClient(FakeLLMClient):
+    def __init__(self, deltas: list[str]) -> None:
+        super().__init__("".join(deltas))
+        self.deltas = deltas
+
+    async def astream(
+        self,
+        messages,
+        *,
+        max_completion_tokens: int,
+    ):
+        self.calls.append(
+            {
+                "messages": list(messages),
+                "max_completion_tokens": max_completion_tokens,
+                "stream": True,
+            }
+        )
+        for delta in self.deltas:
+            await asyncio.sleep(0)
+            yield delta
+
 def make_request() -> AgentRequest:
     return AgentRequest(
         user_id="student-1",
@@ -283,3 +306,56 @@ def test_long_markdown_answer_is_clipped_below_history_limit() -> None:
     assert result.requires_human_review is False
     assert len(result.content) <= 15_000
     assert "[S1]" in result.content
+
+def test_streaming_publishes_only_citation_checked_blocks() -> None:
+    chunk = make_chunk()
+    retriever = FakeRetriever([chunk])
+    llm_client = FakeStreamingLLMClient(
+        [
+            "## Momentum\n\n",
+            "Momentum equals mass times velocity [S1].\n\n",
+            "That relationship is written as `p = mv` [S1].",
+        ]
+    )
+    agent = StudyAgent(retriever, llm_client)
+    streamed: list[str] = []
+
+    async def run():
+        return await agent.run_streaming(
+            make_request(),
+            lambda text: _append(streamed, text),
+        )
+
+    result = asyncio.run(run())
+
+    assert result.requires_human_review is False
+    assert "".join(streamed) == result.content
+    assert streamed[0].startswith("## Momentum")
+    assert streamed[0].endswith("[S1].\n\n")
+    assert result.sources == [chunk.source]
+
+
+def test_streaming_never_emits_a_block_with_an_unknown_citation() -> None:
+    retriever = FakeRetriever([make_chunk()])
+    llm_client = FakeStreamingLLMClient(
+        ["## Momentum\n\n", "Unsupported claim [S9].\n\n"]
+    )
+    agent = StudyAgent(retriever, llm_client)
+    streamed: list[str] = []
+
+    async def run():
+        return await agent.run_streaming(
+            make_request(),
+            lambda text: _append(streamed, text),
+        )
+
+    result = asyncio.run(run())
+
+    assert streamed == []
+    assert result.requires_human_review is True
+    assert result.metadata["reason"] == "unverified_citations"
+
+
+async def _append(values: list[str], text: str) -> None:
+    values.append(text)
+

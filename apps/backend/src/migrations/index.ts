@@ -10,6 +10,7 @@ import { presentations } from "./0008-presentations.js";
 import { wellbeingFlags } from "./0009-wellbeing-flags.js";
 import { companionMessages } from "./0010-companion-messages.js";
 import { companionChats } from "./0011-companion-chats.js";
+import { courseFileIndex } from "./0008-course-file-index.js";
 import type { Migration } from "./migration.js";
 
 export type { Migration };
@@ -26,6 +27,7 @@ export {
   wellbeingFlags,
   companionMessages,
   companionChats,
+  courseFileIndex,
 };
 
 /** Every migration in the order it is applied. Append only. */
@@ -38,6 +40,7 @@ export const MIGRATIONS: readonly Migration[] = [
   classInvitations,
   sources,
   workflowTraces,
+  courseFileIndex,
   presentations,
   wellbeingFlags,
   companionMessages,

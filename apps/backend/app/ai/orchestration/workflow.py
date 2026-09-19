@@ -41,8 +41,13 @@ class AgentWorkflow:
         self._agents = dict(agents)
         self._router = router or route_request_intelligently
 
+    async def route(self, request: AgentRequest) -> RouteDecision:
+        """Return the safely resolved route without executing an agent."""
+
+        return await self._route_safely(request)
+
     async def run(self, request: AgentRequest) -> WorkflowResponse:
-        route = await self._route_safely(request)
+        route = await self.route(request)
 
         if route.denied:
             return WorkflowResponse(

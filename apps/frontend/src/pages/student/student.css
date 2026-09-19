@@ -1719,6 +1719,16 @@
 .s-assistant-answer > :first-child {
   margin-top: 0;
 }
+.s-math-display,
+.s-math-inline {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: middle;
+}
+.s-math-display {
+  display: block;
+}
 .s-assistant-answer > :last-child {
   margin-bottom: 0;
 }

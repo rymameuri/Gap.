@@ -9,17 +9,14 @@ import {
   type AIStudyResponse,
   type StudyRequest,
 } from "./agents/python-service.js";
-import { startTestServer } from "../test/support.js";
+import { ALLOWED_ORIGIN, startTestServer } from "../test/support.js";
 
 class FakeAIService implements AIServiceClient {
   readonly requests: StudyRequest[] = [];
   fail = false;
 
-  study(request: StudyRequest): Promise<AIStudyResponse> {
-    this.requests.push(request);
-    if (this.fail)
-      return Promise.reject(new AIServiceRequestError("sidecar unavailable"));
-    return Promise.resolve({
+  response(): AIStudyResponse {
+    return {
       content: "Momentum equals mass times velocity [S1].",
       sources: [
         {
@@ -33,11 +30,36 @@ class FakeAIService implements AIServiceClient {
       grounded: true,
       requiresHumanReview: false,
       workflow: { routedTo: "study", producedBy: "study" },
-    });
+    };
   }
 
-  extractDocument() {
-    return Promise.resolve({ text: "Course material text.", sectionCount: 1 });
+  study(request: StudyRequest): Promise<AIStudyResponse> {
+    this.requests.push(request);
+    if (this.fail)
+      return Promise.reject(new AIServiceRequestError("sidecar unavailable"));
+    return Promise.resolve(this.response());
+  }
+
+  async studyStream(
+    request: StudyRequest,
+    onUpdate: (
+      update:
+        { type: "status"; message: string } | { type: "delta"; text: string },
+    ) => void | Promise<void>,
+  ): Promise<AIStudyResponse> {
+    this.requests.push(request);
+    if (this.fail) throw new AIServiceRequestError("sidecar unavailable");
+    await onUpdate({ type: "status", message: "Reading course material..." });
+    await onUpdate({ type: "delta", text: "Momentum equals " });
+    await onUpdate({ type: "delta", text: "mass times velocity [S1]." });
+    return this.response();
+  }
+
+  extractDocument(_filename: string, content: Uint8Array) {
+    return Promise.resolve({
+      text: new TextDecoder().decode(content),
+      sectionCount: 1,
+    });
   }
 
   modelJSON(): Promise<unknown> {
@@ -127,6 +149,59 @@ describe("student Study Assistant", () => {
             .body as object,
           "workflows",
         ),
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("includes every uploaded lecture in the trusted AI course index input", async () => {
+    const ai = new FakeAIService();
+    const server = await startTestServer({}, ai);
+    try {
+      const teacher = await server.login("teacher@gap.demo");
+      const student = await server.login("student@gap.demo");
+      for (const [filename, text] of [
+        ["lecture-1.txt", "Lecture one covers vectors and force."],
+        ["lecture-2.txt", "Lecture two covers momentum and collisions."],
+      ] as const) {
+        const upload = await server.request(
+          `/api/teacher/classes/physics/files?filename=${filename}`,
+          {
+            method: "POST",
+            cookie: teacher,
+            headers: { "Content-Type": "application/octet-stream" },
+            rawBody: text,
+          },
+        );
+        assert.equal(upload.status, 201);
+        assert.equal((upload.body as { status: string }).status, "indexed");
+      }
+
+      const asked = await server.request(
+        "/api/student/classes/physics/assistant",
+        {
+          method: "POST",
+          cookie: student,
+          body: { message: "Explain the lectures" },
+        },
+      );
+      assert.equal(asked.status, 200);
+      assert.deepEqual(
+        ai.requests[0]?.documents?.map((document) => ({
+          title: document.title,
+          text: document.text,
+        })),
+        [
+          {
+            title: "lecture-1.txt",
+            text: "Lecture one covers vectors and force.",
+          },
+          {
+            title: "lecture-2.txt",
+            text: "Lecture two covers momentum and collisions.",
+          },
+        ],
       );
     } finally {
       await server.close();
@@ -421,6 +496,51 @@ describe("student Study Assistant", () => {
         (workspace.body as { agentReviews: unknown[] }).agentReviews,
         [],
       );
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("streams progressive updates and finishes with the same safe response", async () => {
+    const ai = new FakeAIService();
+    const server = await startTestServer({}, ai);
+    try {
+      const cookie = await server.login("student@gap.demo");
+      const response = await fetch(
+        server.baseUrl + "/api/student/classes/physics/assistant",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/x-ndjson",
+            Origin: ALLOWED_ORIGIN,
+            Cookie: cookie,
+          },
+          body: JSON.stringify({ message: "Explain momentum" }),
+        },
+      );
+
+      assert.equal(response.status, 200);
+      assert.match(
+        response.headers.get("content-type") ?? "",
+        /application\/x-ndjson/,
+      );
+      const events = (await response.text())
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+      assert.deepEqual(
+        events.map((event) => event.type),
+        ["status", "delta", "delta", "complete"],
+      );
+      assert.equal(events[1]?.text, "Momentum equals ");
+      const completed = events[3]?.response as Record<string, unknown>;
+      assert.equal(completed.content, ai.response().content);
+      assert.equal(completed.grounded, true);
+      assert.equal(completed.requiresHumanReview, false);
+      assert.equal(typeof completed.conversationId, "string");
+      assert.equal(ai.requests.length, 1);
     } finally {
       await server.close();
     }

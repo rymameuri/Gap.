@@ -154,3 +154,22 @@ def test_course_overview_respects_limit() -> None:
     )
 
     assert len(retriever.course_overview("physics-101", limit=1)) == 1
+
+
+def test_course_overview_represents_every_uploaded_document() -> None:
+    retriever = InMemoryCourseRetriever()
+    many_words = " ".join(f"word{i}" for i in range(300))
+    chunks = (
+        create_chunks("lecture-1", many_words)
+        + create_chunks("lecture-2", many_words)
+        + create_chunks("lecture-3", many_words)
+    )
+    retriever.replace_course("physics-101", chunks)
+
+    results = retriever.course_overview("physics-101", limit=6)
+
+    assert {item.source.document_id for item in results} == {
+        "lecture-1",
+        "lecture-2",
+        "lecture-3",
+    }

@@ -28,6 +28,7 @@ import { MaterialReader } from "./components/MaterialReader";
 import { AssistantAnswer } from "./components/AssistantAnswer";
 import { SpeechInputButton } from "../../components/SpeechInputButton";
 import { appendSpeechTranscript } from "../../components/speech-recognition";
+import { streamStudyAssistant } from "./study-stream";
 
 function InstructorQuestion({ courseId }: { courseId: string }) {
   const [question, setQuestion] = useState("");
@@ -101,6 +102,11 @@ export function StudyAssistant() {
   const [turns, setTurns] = useState<
     { question: string; response: StudyAssistantResponse }[]
   >([]);
+  const [pendingTurn, setPendingTurn] = useState<{
+    question: string;
+    content: string;
+    status: string;
+  } | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [assistantError, setAssistantError] = useState("");
@@ -115,6 +121,7 @@ export function StudyAssistant() {
       current?.mode || (params.get("mode") === "topic" ? "topic" : "question"),
     );
     setTurns([]);
+    setPendingTurn(null);
     setAssistantError("");
   }, [draftId, current?.id, params.get("mode"), conversationId]);
   useEffect(() => {
@@ -195,15 +202,37 @@ export function StudyAssistant() {
     if (!question || busy) return;
     setBusy(true);
     setAssistantError("");
+    setPendingTurn({
+      question,
+      content: "",
+      status: "Reading course material…",
+    });
+
     try {
-      const response = await post<StudyAssistantResponse>(
-        `/student/classes/${course.id}/assistant`,
+      const response = await streamStudyAssistant(
+        course.id,
         {
           message: question,
           ...(conversationId ? { conversationId } : {}),
         },
+        (update) => {
+          setPendingTurn((currentTurn) => {
+            if (currentTurn === null) return currentTurn;
+
+            if (update.type === "status")
+              return { ...currentTurn, status: update.message };
+
+            return {
+              ...currentTurn,
+              content: currentTurn.content + update.text,
+              status: "Generating grounded answer…",
+            };
+          });
+        },
       );
+
       setTurns((currentTurns) => [...currentTurns, { question, response }]);
+      setPendingTurn(null);
       setText("");
       setParams({ conversation: response.conversationId }, { replace: true });
       void api<{ conversations: ConversationSummary[] }>(
@@ -215,6 +244,7 @@ export function StudyAssistant() {
         );
       if (response.sources.length > 0) setSourcesOpen(true);
     } catch (error) {
+      setPendingTurn(null);
       setAssistantError(errorMessage(error));
     } finally {
       setBusy(false);
@@ -348,7 +378,7 @@ export function StudyAssistant() {
 
         <div className="s-thread">
           <div className="s-thread-content">
-            {turns.length > 0 ? (
+            {turns.length > 0 || pendingTurn ? (
               <div className="s-assistant-turns" aria-live="polite">
                 {turns.map((turn, index) => (
                   <div className="s-assistant-turn" key={index}>
@@ -378,6 +408,31 @@ export function StudyAssistant() {
                     </div>
                   </div>
                 ))}
+                {pendingTurn && (
+                  <div className="s-assistant-turn">
+                    <div className="s-draft-message">
+                      <span className="s-avatar" aria-hidden="true">
+                        You
+                      </span>
+                      <div>
+                        <span className="s-kicker">Your question</span>
+                        <p>{pendingTurn.question}</p>
+                      </div>
+                    </div>
+                    <div className="s-assistant-message">
+                      <span className="s-assistant-symbol" aria-hidden="true">
+                        <Sparkles size={20} />
+                      </span>
+                      <div>
+                        <span className="s-kicker">Study Assistant</span>
+                        {pendingTurn.content ? (
+                          <AssistantAnswer content={pendingTurn.content} />
+                        ) : null}
+                        <p className="s-composer-note">{pendingTurn.status}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : current ? (
               <div className="s-draft-message">
