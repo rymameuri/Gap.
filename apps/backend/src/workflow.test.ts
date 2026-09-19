@@ -351,6 +351,42 @@ test("Durable teacher/student loop enforces review, approval, isolation and veri
     );
     assert.equal(object(wrong.body).correct, false);
     assert.equal(status(), "struggling");
+    const retry = await call(
+      `/student/gaps/${saraGap}/recheck`,
+      "POST",
+      { answer: "No net force is required" },
+      student,
+    );
+    assert.equal(retry.status, 409);
+    assert.equal(status(), "struggling");
+    const secondExplanation = stringField(
+      await jobResult(
+        stringField(
+          (
+            await call(
+              `/teacher/gaps/${saraGap}/explainer`,
+              "POST",
+              {},
+              teacher,
+            )
+          ).body,
+          "jobId",
+        ),
+      ),
+      "interventionId",
+    );
+    assert.equal(
+      (
+        await call(
+          `/teacher/interventions/${secondExplanation}/approve`,
+          "POST",
+          {},
+          teacher,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(status(), "ready");
     const correct = await call(
       `/student/gaps/${saraGap}/recheck`,
       "POST",
