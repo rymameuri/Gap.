@@ -24,6 +24,7 @@ from app.ai.llm.client import (
 )
 from app.ai.schemas.models import (
     AgentRequest,
+    AgentName,
     ChatMessage,
     HumanReviewItem,
     SourceReference,
@@ -77,6 +78,8 @@ class StudyResponse(BaseModel):
     grounded: bool
     requires_human_review: bool
     pending_review: PendingStudyReview | None = None
+    routed_to: AgentName
+    produced_by: AgentName
 
 
 class ModelJSONRequest(BaseModel):
@@ -176,7 +179,11 @@ def create_app(
             },
         )
 
-    def build_study_response(result: Any) -> StudyResponse:
+    def build_study_response(
+        result: Any,
+        *,
+        routed_to: AgentName | None = None,
+    ) -> StudyResponse:
         pending_review = None
         review_id = result.metadata.get("review_id")
         if result.requires_human_review and isinstance(review_id, str):
@@ -194,6 +201,8 @@ def create_app(
             grounded=bool(result.metadata.get("grounded", False)),
             requires_human_review=result.requires_human_review,
             pending_review=pending_review,
+            routed_to=routed_to or result.agent,
+            produced_by=result.agent,
         )
 
     def stream_line(payload: Mapping[str, Any]) -> str:
@@ -264,7 +273,10 @@ def create_app(
     ) -> StudyResponse:
         ensure_course_index(request)
         response = await shared_service.run(study_agent_request(request))
-        return build_study_response(response.result)
+        return build_study_response(
+            response.result,
+            routed_to=response.route.target_agent,
+        )
 
     @app.post("/v1/study/stream")
     async def study_stream(
@@ -284,12 +296,18 @@ def create_app(
             async def produce() -> None:
                 try:
                     stream_method = getattr(shared_service, "stream_study", None)
+                    routed_to = None
                     if callable(stream_method):
                         result = await stream_method(agent_request, on_delta)
                     else:
-                        result = (await shared_service.run(agent_request)).result
+                        workflow_response = await shared_service.run(agent_request)
+                        result = workflow_response.result
+                        routed_to = workflow_response.route.target_agent
 
-                    response = build_study_response(result)
+                    response = build_study_response(
+                        result,
+                        routed_to=routed_to,
+                    )
                     await queue.put(
                         stream_line(
                             {

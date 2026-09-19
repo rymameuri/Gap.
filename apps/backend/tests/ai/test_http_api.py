@@ -188,6 +188,8 @@ def test_study_indexes_each_material_version_once() -> None:
         "grounded": True,
         "requires_human_review": False,
         "pending_review": None,
+        "routed_to": "study",
+        "produced_by": "study",
     }
 
 
@@ -223,6 +225,8 @@ def test_private_review_payload_is_handed_to_backend_without_publishing_it() -> 
     assert response.status_code == 200
     body = response.json()
     assert body["content"] == "This response needs instructor review."
+    assert body["routed_to"] == "study"
+    assert body["produced_by"] == "study"
     assert body["pending_review"] == {
         "id": "review-1",
         "content": "Private draft for the teacher.",

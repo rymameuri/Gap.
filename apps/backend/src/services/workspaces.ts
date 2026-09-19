@@ -61,6 +61,7 @@ import {
 } from "../repositories/invitations.js";
 import { requireOwnedClass } from "./classes.js";
 import { pendingAgentReviews, type AgentReviewView } from "./agent-reviews.js";
+import { recentWorkflowRuns, type WorkflowRun } from "./workflow-traces.js";
 
 type WithJson<T, K extends keyof T, V> = Omit<T, K> & Record<K, V>;
 
@@ -112,6 +113,7 @@ export interface TeacherWorkspace {
   asked: AskedQuestionRow[];
   engine: string;
   jobs: JobSummaryRow[];
+  workflows: WorkflowRun[];
 }
 
 export interface EmptyTeacherWorkspace {
@@ -165,6 +167,7 @@ export function teacherWorkspace(
     asked: recentQuestions(store, course.id),
     engine: engineName(),
     jobs: recentJobs(store, course.id),
+    workflows: recentWorkflowRuns(store, course.id),
   };
 }
 

@@ -1475,6 +1475,39 @@ components:
         created_at: { $ref: "#/components/schemas/Timestamp" }
         job_id: { type: [string, "null"] }
 
+    WorkflowStep:
+      description: One observed, privacy-safe step in a course workflow.
+      type: object
+      additionalProperties: false
+      required: [id, actor, action, detail, state, sources, created_at]
+      properties:
+        id: { type: string }
+        actor: { type: string }
+        action: { type: string }
+        detail: { type: string }
+        state: { enum: [complete, pending, failed] }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/StudySource" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    WorkflowRun:
+      description: A recent course-scoped workflow with ordered observed steps.
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, status, created_at, updated_at, steps]
+      properties:
+        id: { type: string }
+        kind:
+          enum: [study, quiz_draft, quiz_submission, explanation, follow_up]
+        title: { type: string }
+        status: { enum: [running, awaiting_review, complete, failed, rejected] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowStep" }
+
     AskedQuestion:
       type: object
       required: [id, text, student_name]
@@ -1511,6 +1544,7 @@ components:
           asked,
           engine,
           jobs,
+          workflows,
         ]
       properties:
         classes:
@@ -1551,6 +1585,10 @@ components:
           type: array
           maxItems: 10
           items: { $ref: "#/components/schemas/JobSummary" }
+        workflows:
+          type: array
+          maxItems: 12
+          items: { $ref: "#/components/schemas/WorkflowRun" }
 
     EmptyTeacherWorkspace:
       description: Returned when the teacher owns no classes.

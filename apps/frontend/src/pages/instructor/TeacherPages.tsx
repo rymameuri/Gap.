@@ -1,4 +1,6 @@
 import { MaterialFileImport } from "../../components/MaterialFileImport";
+import { PriorityRationale } from "./PriorityRationale";
+import { WorkflowTimeline } from "./WorkflowTimeline";
 import { CourseFiles } from "../../components/CourseFiles";
 import { RosterImport } from "../../components/RosterImport";
 import { LearningCharts } from "../../components/LearningCharts";
@@ -114,22 +116,25 @@ export function Overview() {
         ))}
       </div>
       {priority && (
-        <section className="priority-insight">
-          <div className="insight-marker">
-            <Layers size={21} />
-          </div>
-          <div>
-            <span className="eyebrow">PRIORITY FOR YOUR CLASS</span>
-            <h2>{priority.topic} needs the most support</h2>
-            <p>
-              {priority.students} of {data.roster.length} students have this
-              learning gap. A focused explanation is a good next step.
-            </p>
-          </div>
-          <Link className="btn insight-action" to="/teacher/content">
-            Prepare explanation <ArrowRight size={16} />
-          </Link>
-        </section>
+        <>
+          <section className="priority-insight">
+            <div className="insight-marker">
+              <Layers size={21} />
+            </div>
+            <div>
+              <span className="eyebrow">PRIORITY FOR YOUR CLASS</span>
+              <h2>{priority.topic} needs the most support</h2>
+              <p>
+                {priority.students} of {data.roster.length} students have this
+                learning gap. A focused explanation is a good next step.
+              </p>
+            </div>
+            <Link className="btn insight-action" to="/teacher/content">
+              Prepare explanation <ArrowRight size={16} />
+            </Link>
+          </section>
+          <PriorityRationale cluster={priority} />
+        </>
       )}
       <LearningCharts
         clusters={data.clusters}
@@ -1102,17 +1107,21 @@ export function Materials() {
 }
 export function AgentActivity() {
   const { data } = useTeacher();
+  const activeJobs = data.jobs.filter(
+    (job) => job.status === "queued" || job.status === "running",
+  );
   return (
     <>
       <Title
-        label="THE LEARNING LOOP"
+        label="CLASS OPERATIONS"
         heading="Agent activity"
-        description="A durable record of agent work, teacher approvals, and student outcomes."
+        description="Review the steps behind assistant answers, assessments, and teaching responses."
       />
-      <section className="panel">
-        <h2>Task queue</h2>
-        {data.jobs.length ? (
-          data.jobs.map((j) => (
+      <WorkflowTimeline runs={data.workflows} />
+      {activeJobs.length > 0 && (
+        <section className="workflow-queue">
+          <h2>Active tasks</h2>
+          {activeJobs.map((j) => (
             <div className="gap" key={j.id}>
               <div>
                 <h3>
@@ -1124,29 +1133,31 @@ export function AgentActivity() {
               </div>
               <Badge status={j.status} />
             </div>
-          ))
+          ))}
+        </section>
+      )}
+      <details className="workflow-audit">
+        <summary>Raw audit events ({data.events.length})</summary>
+        {data.events.length === 0 ? (
+          <Empty>No recorded events yet.</Empty>
         ) : (
-          <Empty>No generation tasks yet.</Empty>
+          data.events.map((e) => (
+            <details className="event" key={e.id}>
+              <summary>
+                <span className="badge sent" style={{ marginRight: 10 }}>
+                  {e.agent}
+                </span>
+                {e.action}
+                <div className="muted" style={{ marginTop: 5 }}>
+                  {new Date(e.created_at).toLocaleString()}
+                </div>
+              </summary>
+              <pre>{JSON.stringify(e.details, null, 2)}</pre>
+              {e.job_id && <div className="muted">Task: {e.job_id}</div>}
+            </details>
+          ))
         )}
-      </section>
-      <section className="panel">
-        <h2>Agent audit trail</h2>
-        {data.events.map((e) => (
-          <details className="event" key={e.id}>
-            <summary>
-              <span className="badge sent" style={{ marginRight: 10 }}>
-                {e.agent}
-              </span>
-              {e.action}
-              <div className="muted" style={{ marginTop: 5 }}>
-                {new Date(e.created_at).toLocaleString()}
-              </div>
-            </summary>
-            <pre>{JSON.stringify(e.details, null, 2)}</pre>
-            {e.job_id && <div className="muted">Task: {e.job_id}</div>}
-          </details>
-        ))}
-      </section>
+      </details>
     </>
   );
 }

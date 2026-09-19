@@ -20,6 +20,11 @@ import {
 } from "../repositories/assessments.js";
 import { draftAssessmentBody, reviewBody, submitBody } from "../validation.js";
 import { requireOwnedClass } from "./classes.js";
+import {
+  appendWorkflowStep,
+  createWorkflowRun,
+  workflowRunForEntity,
+} from "./workflow-traces.js";
 
 const now = (): string => new Date().toISOString();
 
@@ -52,7 +57,16 @@ export function updateQuizDraft(
   if (quiz.status !== "draft")
     throw new ConflictError("Published quizzes cannot be edited.");
   const body = quizSchema.parse(input);
-  saveQuizDraft(store, quiz.id, body.title, JSON.stringify(body.questions));
+  store.transaction(() => {
+    saveQuizDraft(store, quiz.id, body.title, JSON.stringify(body.questions));
+    const runId = workflowRunForEntity(store, "quiz_draft", quiz.id);
+    if (runId)
+      appendWorkflowStep(store, runId, {
+        actor: "Teacher",
+        action: "Edited the draft",
+        detail: "The questions were reviewed before publication.",
+      });
+  });
 }
 
 /** Makes a draft quiz visible to enrolled students. @throws NotFoundError, ConflictError when already published, ZodError for an invalid stored quiz. */
@@ -75,6 +89,18 @@ export function publishQuiz(
     store.event(quiz.class_id, "Teacher", "Assessment published", {
       quizId: quiz.id,
     });
+    const runId = workflowRunForEntity(store, "quiz_draft", quiz.id);
+    if (runId)
+      appendWorkflowStep(
+        store,
+        runId,
+        {
+          actor: "Teacher",
+          action: "Published the quiz",
+          detail: "Enrolled students can now take this assessment.",
+        },
+        "complete",
+      );
   });
 }
 
@@ -136,6 +162,26 @@ export function approveReview(
       submission.student_id,
     );
     diagnose(store, submission.class_id, submission.student_id);
+    const runId = workflowRunForEntity(store, "quiz_submission", submission.id);
+    if (runId) {
+      appendWorkflowStep(store, runId, {
+        actor: "Teacher",
+        action: "Approved the grade",
+        detail:
+          "The reviewed score and feedback are now visible to the student.",
+      });
+      appendWorkflowStep(
+        store,
+        runId,
+        {
+          actor: "Diagnostic",
+          action: "Updated learning evidence",
+          detail:
+            "The student's learning gaps and class priorities were refreshed.",
+        },
+        "complete",
+      );
+    }
   });
 }
 
@@ -204,6 +250,37 @@ export async function submitQuiz(
         : "Graded against the rubric.",
       created_at: now(),
     });
+    createWorkflowRun(store, {
+      id,
+      classId: quiz.class_id,
+      kind: "quiz_submission",
+      title: quiz.title,
+      studentId,
+      entityId: id,
+    });
+    appendWorkflowStep(store, id, {
+      actor: "Student",
+      action: "Submitted answers",
+      detail: `${String(questions.length)} answers were submitted for rubric grading.`,
+    });
+    appendWorkflowStep(store, id, {
+      actor: "Assessment",
+      action: "Graded against the rubric",
+      detail: `Score ${String(score)}/${String(total)}; confidence ${String(Math.round(confidence * 100))}%; engine ${engineName()}.`,
+    });
+    appendWorkflowStep(
+      store,
+      id,
+      {
+        actor: "Review gate",
+        action: pending ? "Held an uncertain grade" : "Cleared the grade",
+        detail: pending
+          ? "A teacher must review the score before the student sees it."
+          : "The confidence threshold was met; the score can be published.",
+        state: pending ? "pending" : "complete",
+      },
+      pending ? "awaiting_review" : undefined,
+    );
     store.event(
       quiz.class_id,
       "Assessment",
@@ -222,6 +299,16 @@ export async function submitQuiz(
         id,
       );
       diagnose(store, quiz.class_id, studentId);
+      appendWorkflowStep(
+        store,
+        id,
+        {
+          actor: "Diagnostic",
+          action: "Updated learning evidence",
+          detail: `${String(new Set(questions.map((question) => question.tag)).size)} topic signals were checked and class priorities refreshed.`,
+        },
+        "complete",
+      );
     }
   });
   return pending

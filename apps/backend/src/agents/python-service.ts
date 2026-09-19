@@ -39,6 +39,9 @@ export type StudyStreamUpdate =
   | { readonly type: "status"; readonly message: string }
   | { readonly type: "delta"; readonly text: string };
 
+export type StudyWorkflowAgent =
+  "orchestrator" | "study" | "assessment" | "diagnostic" | "reviewer";
+
 export interface DocumentImportResult {
   readonly text: string;
   readonly sectionCount: number;
@@ -82,6 +85,10 @@ export interface PendingStudyReview {
 
 export type AIStudyResponse = StudyResponse & {
   readonly pendingReview?: PendingStudyReview;
+  readonly workflow?: {
+    readonly routedTo: StudyWorkflowAgent;
+    readonly producedBy: StudyWorkflowAgent;
+  };
 };
 
 export interface AIServiceClient {
@@ -117,6 +124,12 @@ const internalStudyResponse = z.object({
   sources: z.array(internalSource),
   grounded: z.boolean(),
   requires_human_review: z.boolean(),
+  routed_to: z
+    .enum(["orchestrator", "study", "assessment", "diagnostic", "reviewer"])
+    .optional(),
+  produced_by: z
+    .enum(["orchestrator", "study", "assessment", "diagnostic", "reviewer"])
+    .optional(),
   pending_review: z
     .object({
       id: z.string(),
@@ -283,6 +296,14 @@ export class PythonAIServiceClient implements AIServiceClient {
       sources: response.sources.map(source),
       grounded: response.grounded,
       requiresHumanReview: response.requires_human_review,
+      ...(response.routed_to && response.produced_by
+        ? {
+            workflow: {
+              routedTo: response.routed_to,
+              producedBy: response.produced_by,
+            },
+          }
+        : {}),
       ...(response.pending_review
         ? {
             pendingReview: {
