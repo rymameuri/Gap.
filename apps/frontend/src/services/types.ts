@@ -79,6 +79,16 @@ export type Review = {
   confidence: number;
   reason: string;
 };
+export type AgentReview = {
+  id: string;
+  student_name: string;
+  kind: string;
+  content: string;
+  sources: StudySource[];
+  issues: string[];
+  status: "pending" | "published" | "rejected";
+  created_at: string;
+};
 export type Intervention = {
   id: string;
   topic: string;
@@ -111,6 +121,7 @@ export type TeacherData = {
   }[];
   quizzes: Quiz[];
   reviews: Review[];
+  agentReviews: AgentReview[];
   interventions: Intervention[];
   events: AgentEvent[];
   asked: { id: string; text: string; student_name: string }[];
@@ -154,4 +165,36 @@ export type StudyAssistantResponse = {
   sources: StudySource[];
   grounded: boolean;
   requiresHumanReview: boolean;
+  conversationId: string;
+};
+
+export type ConversationSummary = {
+  id: string;
+  class_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ConversationDetail = {
+  conversation: ConversationSummary;
+  messages: {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    sources: StudySource[];
+    grounded: boolean | null;
+    requiresHumanReview: boolean | null;
+    created_at: string;
+  }[];
+};
+
+export type CourseFile = {
+  id: string;
+  class_id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  status: "stored" | "indexed" | "failed";
+  created_at: string;
 };

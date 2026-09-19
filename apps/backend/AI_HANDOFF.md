@@ -2,9 +2,7 @@
 
 ## Status
 
-- Integration branch: `integration/ai-backend`
-- Integration base: `de9df43`
-- Python AI tests: 70
+- Integrated on `main`; the current Python AI suite is run with `pytest tests/ai -q`.
 - Provider: QuantumBlack Azure gateway
 - Public backend: Express and TypeScript
 - Private AI runtime: FastAPI and Python
@@ -28,9 +26,11 @@ React
 
 The Express assessment/content workflow calls FastAPI's private model adapter and keeps its existing Zod validation, queue and transactions. The student assistant calls the Python Study Agent directly through Express. Do not expose FastAPI to the browser.
 
-## P0 document boundary
+## Document boundary
 
-The Python loaders support PDF, Word (`.docx`) and PowerPoint (`.pptx`) parsing. In the integrated P0 request path, Express sends the trusted syllabus text already stored for the class and FastAPI indexes it by `material_version`. A teacher-facing upload/storage route is not wired end to end yet; keep that as P2 rather than claiming file upload is complete.
+The Python loaders support PDF, Word (`.docx`) and PowerPoint (`.pptx`) parsing. Teachers can import extracted text into the editable syllabus and separately store original course files for student download. Express persists the original bytes and metadata in SQLite, with status `stored`. In the current Study Assistant request path, Express still sends trusted syllabus text and FastAPI indexes that text by `material_version`. Stored files are **not** indexed for assistant or quiz retrieval. Do not claim file-grounded answers until the course-file extraction, chunk versioning and citation pipeline is connected and tested.
+
+Held Study Assistant output is transferred from the sidecar's temporary queue to Express/SQLite. Express is the canonical instructor-facing review queue and never returns the private draft to a student before teacher approval. Python's standalone agent methods can still create internal review items; any future browser-facing use of those methods must transfer them through the same durable contract.
 
 ## Local configuration
 
@@ -55,6 +55,7 @@ The Python loaders support PDF, Word (`.docx`) and PowerPoint (`.pptx`) parsing.
 
 - `GET /health`: authenticated sidecar health check.
 - `POST /v1/study`: trusted course context to a reviewed, cited Study Agent response.
+- `POST /v1/documents/extract`: authenticated document-to-text preview for the teacher editor.
 - `POST /v1/model-json`: private provider adapter for existing TypeScript agents; Express validates the returned object with Zod.
 
 ## Verification

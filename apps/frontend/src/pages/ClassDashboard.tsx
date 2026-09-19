@@ -233,7 +233,8 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                   />
                   {importError && <p role="alert">{importError}</p>}
                   <p className="muted">
-                    PDF and DOCX imports are not available yet.
+                    PDF, Word, and PowerPoint files can be imported from Class
+                    materials after you create the class.
                   </p>
                 </>
               ) : (

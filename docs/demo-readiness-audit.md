@@ -1,5 +1,8 @@
 # Demo readiness audit (2026-09-19)
 
+This records the original walkthrough. See the [updated fix ownership map](fix-ownership-map.md)
+for current implementation status after the backend/data work.
+
 ## Scope and setup
 
 The interactive checks used a fresh, isolated SQLite database and the local

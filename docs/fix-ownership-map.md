@@ -1,9 +1,10 @@
 # Fix ownership map (2026-09-19)
 
 This map builds on the [interactive audit](demo-readiness-audit.md). "Fixed"
-means the code is pushed and the relevant UI/build checks passed. "Open" means
-the behavior or verification still needs work. Priority is relative to a demo
-that presents the full teacher-to-student learning loop.
+means the code is pushed and the relevant checks passed. "Open" means the
+behavior or verification still needs work. The backend/data update was checked
+against 193 Node tests, 102 Python AI tests, and a production frontend build.
+Priority is relative to a demo that presents the full learning loop.
 
 ## Quick UI and session fixes
 
@@ -81,45 +82,45 @@ that presents the full teacher-to-student learning loop.
 
 ## Functional and architectural work
 
-### 6. Correct new quiz does not close an older learning gap - open
+### 6. Correct new quiz does not close an older learning gap - fixed
 
 - **Problem:** Sara's teacher-approved 4/4 Force and motion quiz appeared in
   results, but the topic still said "Needs practice" and remained on the
   revisit list.
-- **Why:** Assessment grading records incorrect-answer gaps but does not
+- **Why:** Assessment grading recorded incorrect-answer gaps but did not
   reconcile older open gaps after later full-credit evidence. The frontend
-  prioritizes an open gap over a newer quiz result.
+  prioritized an open gap over a newer quiz result.
 - **Responsible layers:** Product evidence rule, backend diagnostic/assessment
   services, persistent gap state, and frontend progress derivation.
-- **Change:** Decide whether a new independent full-credit assessment closes
-  the matching misconception, and how recency and multiple questions/tags
-  count. Apply the transition transactionally, preserve evidence provenance,
-  refresh teacher clusters and student labels, and add cross-role tests.
-- **Scope:** Cross-cutting. Existing `gaps.status` may support the transition;
-  a stronger evidence-to-gap link may require a data-model migration.
-- **Dependencies and risks:** Prematurely closing a gap would overstate mastery.
-  Do not fix only the display while teacher and student data disagree.
-- **Timing:** Fix before a demo that claims quizzes verify or close gaps.
+- **Change:** A published quiz now resolves a matching existing gap only when
+  every question for that misconception tag receives full credit. The
+  resolution links to the submission, and student progress uses that evidence
+  to distinguish independent success from an instructor-guided follow-up.
+- **Scope:** Backend diagnostic state, a new provenance table, and student
+  progress labels. Pending grades still wait for teacher approval.
+- **Dependencies and risks:** The rule is intentionally conservative, but a
+  different mastery policy would need product and cross-role test updates.
+- **Timing:** Done in `adb791e`.
 
-### 7. Real syllabus and course-file upload is not connected - open
+### 7. Course-file persistence is implemented; AI indexing remains open
 
-- **Problem:** `.txt` import only copies content into the syllabus field.
-  PDF/DOCX/PPTX files cannot be uploaded, stored, or searched from the app.
-- **Why:** Python parsers exist, but Express has no authorized upload and
-  durable-material workflow; the AI sidecar indexes stored syllabus text only.
-- **Responsible layers:** Frontend/UI, Express API integration, file storage
-  and database metadata, Python RAG extraction/chunking/indexing, and agent
-  source contracts.
-- **Change:** Add authenticated upload/delete/version endpoints; validate
-  type/size and ownership; store originals and extraction status; index chunks
-  per course/version; expose citation-ready sources to the assistant and quiz
-  generator. Show processing/error states to instructors.
-- **Scope:** Cross-cutting and security-sensitive. It changes what counts as
-  authoritative course content throughout teacher and student workflows.
-- **Dependencies and risks:** File privacy, malware/format handling, quotas,
-  re-indexing, stale citations, and model data-transfer approval.
-- **Timing:** Before claiming file-grounded AI or demonstrating uploaded PDFs;
-  otherwise defer and state the text-only boundary plainly.
+- **Problem:** Teachers can now store and share original files, but those files
+  are not searched by the assistant or quiz generator.
+- **Why:** Express now has authorized upload/list/download/delete APIs and
+  SQLite byte storage. The teammate's document reader can also extract a
+  PDF/DOCX/PPTX into editable syllabus text. Neither path indexes stored file
+  chunks into the agent retrieval workflow.
+- **Responsible layers:** Backend/data and frontend storage are implemented;
+  Python RAG, agent source contracts, and cross-service integration remain.
+- **Change:** Index stored files per course/version, persist extraction status
+  and citation-ready chunk references, then connect retrieval to both study
+  and quiz generation. The current file status is explicitly `stored`.
+- **Scope:** Cross-cutting and security-sensitive; it changes authoritative
+  course content for both roles.
+- **Dependencies and risks:** File privacy, format validation, scanning,
+  quotas, re-indexing, stale citations, and model data-transfer approval.
+- **Timing:** Storage done in `5222bae`; indexing is required before claiming
+  uploaded-file-grounded AI.
 
 ### 8. Quiz generation beyond the Physics demo bank - open
 
@@ -160,67 +161,72 @@ that presents the full teacher-to-student learning loop.
   privacy permission for course material, rate limits, and response quality.
 - **Timing:** Before a demo that promises live student chat.
 
-### 10. Saved assistant drafts are browser-local, not durable conversations - open
+### 10. Conversations are durable; unsent drafts remain browser-local
 
-- **Problem:** A student can resume a saved prompt in the same browser, but
-  drafts and chat turns do not follow them across devices.
-- **Why:** The frontend uses browser storage; the API accepts request history
-  but does not persist authenticated conversation records.
+- **Problem:** Sent conversations now follow the student across devices, but
+  unsent saved drafts still live only in that browser.
+- **Why:** The new server conversation/message store is separate from the
+  existing browser-local draft feature.
 - **Responsible layers:** Frontend, backend API, database/data model, and
   authentication/course authorization.
-- **Change:** Add conversation/message tables and scoped CRUD endpoints;
-  define retention and deletion; sync the assistant UI to server state.
+- **Change:** Conversation/message tables and course-scoped APIs now persist
+  turns, rebuild trusted history, and support deletion. Draft syncing would
+  require a separate record and API if the product needs it.
 - **Scope:** Student assistant only initially, with possible instructor
   analytics/privacy implications if conversations later become evidence.
-- **Dependencies and risks:** Sensitive learning data, consent, retention,
-  cross-device consistency, and migration of existing local drafts.
-- **Timing:** Can wait for a single-device demo; needed for the stated resume
-  previous-sessions product experience.
+- **Dependencies and risks:** Sensitive learning data and retention policy still
+  need a deployment decision; existing local drafts are not migrated.
+- **Timing:** Durable conversations done in `5222bae`; cross-device unsent
+  drafts can wait.
 
-### 11. Python review queue is separate and in memory - open
+### 11. Student-facing AI review now reaches the instructor queue
 
-- **Problem:** The Python agent has an in-memory human-review queue, but the
-  instructor review screen uses Express/SQLite submissions. They are not one
-  shared queue.
-- **Why:** The Python service was integrated as a private model adapter while
-  Express remains the durable workflow and source of authorization.
+- **Problem:** Previously, a held Study Assistant answer stayed in Python's
+  in-memory queue and was invisible to the instructor.
+- **Why:** The private model adapter did not transfer the review payload to
+  Express, which owns durable workflow and authorization.
 - **Responsible layers:** AI/agent orchestration, backend/API integration,
   database/data model if Python review items must persist, and instructor UI
   only if a new review type is exposed.
-- **Change:** Choose Express/SQLite as the canonical queue and persist/route
-  any additional Python review work into it, or keep Python's queue internal
-  and stop implying it is visible to teachers.
-- **Scope:** Cross-service contract, not a CSS or prompt change.
-- **Dependencies and risks:** Duplicate approvals, lost in-memory items after
-  restart, inconsistent authorization and audit history.
-- **Timing:** Can wait if the Python queue is not a user-facing promise; fix
-  before describing it as integrated teacher review.
+- **Change:** The sidecar transfers held study output to Express, which stores
+  it in SQLite and exposes it on the teacher review screen. Approval or
+  rejection updates the student's durable conversation. Python's queue is
+  consumed at handoff. Other standalone Python agent workflows are not used by
+  this Express screen and would need the same contract if activated later.
+- **Scope:** Cross-service contract plus instructor UI; existing quiz grade
+  reviews remain in their established Express queue.
+- **Dependencies and risks:** Review transfer is not a distributed transaction:
+  a failed backend save returns an error so the student can retry. Audit and
+  retention policy still need deployment decisions.
+- **Timing:** Student-facing path done in `5222bae`; future Python workflows
+  should use the same canonical queue.
 
-### 12. Text-import edge case and unverified interactive controls - open
+### 12. Text-import validation fixed; device controls still need QA
 
-- **Problem:** The Class materials `.txt` importer silently ignores files
-  over 200 KB. Native file selection and microphone dictation were not
-  interactively tested in the audit.
-- **Why:** The import handler returns without setting an error; browser
-  automation could not drive the native file picker or microphone permission.
+- **Problem:** The earlier audit found a silent size rejection. Current code
+  shows an inline error for oversized `.txt` imports; native file selection and
+  microphone dictation remain unverified on a real device.
+- **Why:** The UI validation was corrected in teammate updates. The available
+  browser automation did not exercise OS file picking or microphone permission.
 - **Responsible layers:** Frontend/UI for import feedback; QA/browser-device
   testing for file and microphone controls. No role-permission or RAG fix is
   required to show a validation error.
-- **Change:** Show inline size/type/read errors and reset the file input;
-  manually test valid/invalid `.txt` files and speech allow/deny states in
-  Chrome. Add focused automated coverage where browser APIs can be mocked.
-- **Scope:** Isolated input handling; it does not implement PDF/DOCX support.
+- **Change:** Keep the inline validation; manually test valid/invalid files
+  and speech allow/deny states in Chrome. Add focused browser tests where APIs
+  can be mocked.
+- **Scope:** Isolated input handling; it is separate from document extraction
+  and stored-file indexing.
 - **Dependencies and risks:** Browser permissions and file-size limits must
   match backend validation. Avoid suggesting an imported file was indexed.
-- **Timing:** Quick frontend fix and QA before using these controls in a demo.
+- **Timing:** Validation fixed; manual device QA remains before demoing these
+  controls.
 
 ## Recommended order
 
-1. Complete the quick import validation and manual control checks (issue 12).
-2. Resolve the mastery rule and make teacher/student state agree (issue 6).
-3. Smoke-test the live assistant and, if needed, add honest unavailable states
-   (issue 9).
-4. Decide whether the demo claims arbitrary uploaded-course grounding. If it
-   does, issues 7 and 8 are prerequisites, not polish.
-5. Schedule durable conversations and Python review-queue consolidation based
-   on the product scope (issues 10 and 11).
+1. Smoke-test the live assistant with an approved fixture (issue 9).
+2. Decide whether the demo claims arbitrary uploaded-course grounding. If it
+   does, file indexing (issue 7) and source-grounded generation (issue 8) are
+   prerequisites, not polish.
+3. Manually check native file selection and speech permissions (issue 12).
+4. Set retention rules for conversations and review data before deploying
+   outside the demo environment (issues 10 and 11).

@@ -1,4 +1,5 @@
 import { MaterialFileImport } from "../../components/MaterialFileImport";
+import { CourseFiles } from "../../components/CourseFiles";
 import { LearningCharts } from "../../components/LearningCharts";
 import {
   Users,
@@ -19,6 +20,7 @@ import type {
   Question,
   Intervention,
   Review,
+  AgentReview,
 } from "../../services/types";
 import { SpeechInputButton } from "../../components/SpeechInputButton";
 import { appendSpeechTranscript } from "../../components/speech-recognition";
@@ -73,7 +75,7 @@ export function Overview() {
     },
     {
       label: "Awaiting review",
-      value: data.reviews.length,
+      value: data.reviews.length + data.agentReviews.length,
       detail: "Responses to check",
       Icon: ClipboardCheck,
       tone: "sand",
@@ -637,17 +639,87 @@ export function ReviewQueue() {
     <>
       <Title
         label="TEACHER REVIEW"
-        heading="Grades for review"
-        description="Check uncertain scores and publish feedback to students."
+        heading="Work for review"
+        description="Check uncertain grades and Study Assistant responses before students see them."
       />
-      {data.reviews.length ? (
-        data.reviews.map((r) => <ReviewCard key={r.id} review={r} />)
-      ) : (
+      {data.agentReviews.map((review) => (
+        <AgentReviewCard key={review.id} review={review} />
+      ))}
+      {data.reviews.map((review) => (
+        <ReviewCard key={review.id} review={review} />
+      ))}
+      {data.reviews.length + data.agentReviews.length === 0 && (
         <section className="panel">
-          <Empty>All caught up. No grades are awaiting review.</Empty>
+          <Empty>All caught up. No work is awaiting review.</Empty>
         </section>
       )}
     </>
+  );
+}
+
+function AgentReviewCard({ review }: { review: AgentReview }) {
+  const { refresh } = useTeacher();
+  const action = useAction();
+  const [content, setContent] = useState(review.content);
+  async function decide(decision: "publish" | "reject") {
+    await action.run(
+      async () => {
+        await post("/teacher/agent-reviews/" + review.id, {
+          action: decision,
+          ...(decision === "publish" ? { content } : {}),
+        });
+        await refresh();
+      },
+      decision === "publish"
+        ? "Response shared with the student."
+        : "Response rejected.",
+    );
+  }
+  return (
+    <section className="panel">
+      <div className="panelhead">
+        <h2>Study Assistant response for {review.student_name}</h2>
+        <span className="badge open">Needs review</span>
+      </div>
+      <p className="muted">{review.issues.join(" ")}</p>
+      <label className="field" htmlFor={"agent-review-" + review.id}>
+        Response to publish
+      </label>
+      <textarea
+        id={"agent-review-" + review.id}
+        value={content}
+        maxLength={10000}
+        disabled={action.busy}
+        onChange={(event) => setContent(event.target.value)}
+      />
+      {review.sources.length > 0 && (
+        <p className="muted">
+          Sources: {review.sources.map((source) => source.title).join(", ")}
+          {content !== review.content
+            ? " (citations are cleared when edited)"
+            : ""}
+        </p>
+      )}
+      {action.error && <ErrorBox message={action.error} />}
+      <div className="actions">
+        <button
+          className="btn primary"
+          type="button"
+          disabled={action.busy || !content.trim()}
+          onClick={() => void decide("publish")}
+        >
+          Publish response
+        </button>
+        <button
+          className="btn"
+          type="button"
+          disabled={action.busy}
+          onClick={() => void decide("reject")}
+        >
+          Reject
+        </button>
+      </div>
+    </section>
   );
 }
 export function ContentStudio() {
@@ -863,6 +935,7 @@ export function Materials() {
           </div>
         </form>
       </section>
+      <CourseFiles courseId={data.course.id} canManage />
       <section className="panel">
         <h2>Class roster</h2>
         <form

@@ -5,6 +5,7 @@ import { useCourse } from "../../layouts/StudentLayout";
 import { coursePath } from "./course-model";
 import { PageHeading, SectionHeading } from "./components/StudentUI";
 import { MaterialReader } from "./components/MaterialReader";
+import { CourseFiles } from "../../components/CourseFiles";
 
 export function StudentMaterials() {
   const { course, gaps } = useCourse();
@@ -43,10 +44,6 @@ export function StudentMaterials() {
                 </span>
               </button>
             ))}
-          <p className="s-muted s-material-note">
-            Slides and additional notes will appear when your instructor shares
-            them.
-          </p>
           <Link className="s-text-link" to={coursePath(course.id, "assistant")}>
             Open Study Assistant <ArrowRight size={16} />
           </Link>
@@ -58,6 +55,7 @@ export function StudentMaterials() {
           onSelect={setSelected}
         />
       </div>
+      <CourseFiles courseId={course.id} />
     </>
   );
 }
