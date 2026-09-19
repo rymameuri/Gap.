@@ -51,6 +51,10 @@ import {
   type AskedQuestionRow,
   type JobSummaryRow,
 } from "../repositories/activity.js";
+import {
+  explainClusterPriorities,
+  type PriorityExplanation,
+} from "../explain/cluster-priority.js";
 import { requireOwnedClass } from "./classes.js";
 
 type WithJson<T, K extends keyof T, V> = Omit<T, K> & Record<K, V>;
@@ -73,10 +77,25 @@ export type InterventionView = Omit<InterventionRow, "probe" | "targets"> & {
 };
 export type EventView = WithJson<EventRow, "details", Record<string, unknown>>;
 
+export type ClusterView = ClusterRow & {
+  /** Why the cluster ranks where it does; see explain/cluster-priority.ts. */
+  priorityExplanation: PriorityExplanation;
+};
+
+function explainedClusters(rows: ClusterRow[]): ClusterView[] {
+  const explanations = explainClusterPriorities(rows);
+  return rows.map((row, index) => {
+    const priorityExplanation = explanations[index];
+    if (priorityExplanation === undefined)
+      throw new Error("Missing explanation for a gap cluster");
+    return { ...row, priorityExplanation };
+  });
+}
+
 export interface TeacherWorkspace {
   classes: ClassRow[];
   course: ClassRow;
-  clusters: ClusterRow[];
+  clusters: ClusterView[];
   gaps: TeacherGapRow[];
   roster: RosterEntry[];
   quizzes: TeacherQuizView[];
@@ -110,7 +129,7 @@ export function teacherWorkspace(
   return {
     classes: courses,
     course,
-    clusters: openClusters(store, course.id),
+    clusters: explainedClusters(openClusters(store, course.id)),
     gaps: classGaps(store, course.id),
     roster: classRoster(store, course.id),
     quizzes: classQuizzes(store, course.id).map((row) => ({

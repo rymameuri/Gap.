@@ -313,8 +313,14 @@ export function Overview() {
 export function Assessments() {
   const { data, refresh } = useTeacher(),
     action = useAction();
-  const [topic, setTopic] = useState("Force and motion"),
+  const [topic, setTopic] = useState(
+      data.course.id === "physics" ? "Force and motion" : "",
+    ),
     [draft, setDraft] = useState<Quiz | null>(null);
+  useEffect(() => {
+    setTopic(data.course.id === "physics" ? "Force and motion" : "");
+    setDraft(null);
+  }, [data.course.id]);
   async function generate() {
     await action.run(async () => {
       const { jobId } = await post<{ jobId: string }>(
@@ -358,10 +364,17 @@ export function Assessments() {
       <Title
         label="ASSESSMENT"
         heading="Check understanding."
-        description="Draft questions from your syllabus, then review them before publishing."
+        description="Choose a course topic, then review every question before publishing."
       />
       {action.error && <ErrorBox message={action.error} />}
       <section className="panel">
+        {data.engine === "local" && (
+          <p className="muted">
+            The local demo can draft only Force and motion, Energy and work, or
+            Electric circuits when the topic appears in the syllabus. Other
+            topics require live AI.
+          </p>
+        )}
         <label className="field" htmlFor="topic">
           Topic
         </label>
@@ -371,6 +384,7 @@ export function Assessments() {
             list="topics"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
+            placeholder="Enter a topic from this course"
           />
           <SpeechInputButton
             label="Dictate the assessment topic"
@@ -383,11 +397,10 @@ export function Assessments() {
           />
         </div>
         <datalist id="topics">
-          {["Force and motion", "Energy and work", "Electric circuits"].map(
-            (t) => (
-              <option key={t} value={t} />
-            ),
-          )}
+          {data.engine === "local" &&
+            ["Force and motion", "Energy and work", "Electric circuits"].map(
+              (t) => <option key={t} value={t} />,
+            )}
         </datalist>
         <div className="actions">
           <button

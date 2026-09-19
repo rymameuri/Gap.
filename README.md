@@ -1,91 +1,174 @@
-# Gap
+# Manara
 
-A full-stack learning-gap workspace with a React/TypeScript frontend, an Express/TypeScript API, persistent SQLite storage, and a teacher-supervised learning loop.
+Manara is a course-specific learning platform for university teachers and students. It finds the misconceptions behind students' wrong answers, groups them across a class, and helps the teacher close them with targeted explanations and follow-up checks. AI drafts quizzes, grades and explanations; the teacher approves anything a student sees.
 
-## Quick start
+## How it works
 
-Requires Node.js 20.19+ and Python 3.11+ for the AI sidecar.
+The product is built around one loop per class:
+
+1. **Assess.** The teacher requests a quiz on a syllabus topic. A draft is generated with a misconception attached to each question; the teacher edits and publishes it.
+2. **Grade.** Multiple-choice answers are graded against the answer key. Grades the system is not confident about are held in a review queue and stay hidden from the student until the teacher approves them.
+3. **Diagnose.** Incorrect answers become per-student learning gaps, grouped into class-wide clusters and ranked by priority (students affected times severity).
+4. **Explain.** For a cluster, the teacher generates an explanation and a new follow-up question, reviews it and shares it with the affected students.
+5. **Verify.** Each student answers the follow-up once. A correct answer resolves their gap; a wrong one flags it for the teacher, who can share a new explanation.
+
+Every step is recorded in an activity log, and the dashboard reflects outcomes as they happen.
+
+## Features
+
+**Teachers**
+
+- Create classes and invite students with an eight-character join code
+- Class overview with ranked gap clusters, student questions and students who need support
+- Priority breakdown for each cluster, computed with exact Shapley values
+- Quiz drafting, editing and publishing
+- Review queue for uncertain grades
+- Explanation drafting, editing and approval
+- Activity log of generated content, approvals and student outcomes
+- Voice input for text fields
+
+**Students**
+
+- Course list and per-course workspace: overview, practice and quizzes, materials, progress
+- Study Assistant: answers grounded in the course material, with cited sources; answers that cannot be verified are withheld
+- Lessons with teacher-approved explanations and a single follow-up check
+- Topic progress in four states: not assessed, needs practice, completed with support, demonstrated independently
+- Voice input for questions
+
+## Architecture
+
+```mermaid
+flowchart LR
+  B[React client] --> E[Express API]
+  E --> D[(SQLite)]
+  E --> Q[Job queue]
+  E --> A[FastAPI AI service]
+  A --> R[Course retrieval]
+  A --> G[QuantumBlack AI gateway]
+```
+
+- **Express** is the only service the browser can reach. It owns authentication, roles, class ownership and membership checks, request validation, persistence and background jobs.
+- **The AI service** is a private FastAPI process bound to a loopback address. Each request must carry an internal token. It performs course-scoped retrieval, request routing, generation, citation checks and response review.
+- **Student and course identity** passed to the AI service always comes from Express's session and database, never from the browser.
+- **Rules, not the model, decide outcomes.** Gap detection, ranking and resolution are deterministic rules in Express. Model output is validated against a schema before it is stored.
+
+See [docs/architecture.md](docs/architecture.md) for component responsibilities and runtime boundaries.
+
+## Technology
+
+| Area         | Stack                                                      |
+| ------------ | ---------------------------------------------------------- |
+| Client       | React 19, TypeScript, Vite, React Router, Web Speech API   |
+| API          | Node.js 20+, Express 4, TypeScript (strict), zod, pino     |
+| Storage      | SQLite via sql.js, versioned reversible migrations         |
+| AI service   | Python 3.11+, FastAPI, pydantic, BM25-style retrieval      |
+| Documents    | pypdf, python-docx, python-pptx                            |
+| Models       | QuantumBlack AI gateway (Azure OpenAI compatible)          |
+| API contract | OpenAPI 3.1, validated against responses in tests          |
+| Quality      | ESLint, Prettier, Node test runner, pytest, GitHub Actions |
+
+## Getting started
+
+Requirements: Node.js 20.19 or later (22 or later to run the backend tests) and Python 3.11 or later.
 
 ```sh
-npm install
-cd apps/backend
-python -m venv .venv
-# Windows: .\.venv\Scripts\python.exe -m pip install -r requirements-ai.txt
-# macOS/Linux: .venv/bin/python -m pip install -r requirements-ai.txt
-cd ../..
+npm ci
+cp .env.example .env
 npm run dev
 ```
 
-Open http://localhost:3000. The React frontend runs on port 3000 and proxies API requests to port 3001.
+Open http://localhost:3000. The client runs on port 3000 and proxies `/api` to Express on port 3001. On first start the database is migrated and seeded with a demo physics class.
 
-Use the Teacher demo or Student demo buttons, or sign in with:
+Without the AI service or model credentials, Express uses a built-in local engine that covers the three demo topics. The Study Assistant requires the AI service and returns 503 without it.
 
-| Role           | Email            | Demo password |
-| -------------- | ---------------- | ------------- |
-| Teacher        | teacher@gap.demo | GapDemo!2026  |
-| Student (Sara) | student@gap.demo | GapDemo!2026  |
-| Student (Omar) | omar@gap.demo    | GapDemo!2026  |
+### Demo accounts
 
-These are deliberately seeded demonstration accounts and sample records. Set DEMO_PASSWORD before creating a fresh database to choose another password. Production seeding requires an explicit DEMO_PASSWORD.
+| Role    | Email            | Password     |
+| ------- | ---------------- | ------------ |
+| Teacher | teacher@gap.demo | GapDemo!2026 |
+| Student | student@gap.demo | GapDemo!2026 |
+| Student | omar@gap.demo    | GapDemo!2026 |
 
-## The working learning loop
+Set `DEMO_PASSWORD` before the first start to use a different password. It is required in production.
 
-1. Teacher supplies a syllabus and drafts an assessment.
-2. Assessment generates questions and grades submissions against a rubric.
-3. Grades below 80% confidence enter the review queue; students cannot see them until teacher approval.
-4. Diagnostic groups published misconception evidence and ranks affected topics by frequency and severity.
-5. Content prepares a focused explanation and a different follow-up question. The teacher reviews and approves it before students receive it.
-6. A student completes the recheck. A correct answer resolves only that student's gap; a wrong answer keeps it open and escalates it for teacher support.
-7. Outcomes update the dashboard and agent audit trail. All records persist across restarts.
+### Enabling the AI service
 
-## Local engine and live AI
+1. Create the Python environment:
 
-Without model credentials, the backend uses an explicit local teaching engine for the three physics topics. Multiple-choice grading uses an answer key. Short-answer lexical evidence is deliberately held for teacher review, because keywords are not proof of semantic correctness.
+   ```sh
+   cd apps/backend
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r requirements-ai.txt
+   cd ../..
+   ```
 
-The recommended model path is the private FastAPI sidecar. Keep QuantumBlack credentials in ignored `apps/backend/.env`, then set `AI_SERVICE_URL=http://127.0.0.1:8001` and a random `AI_INTERNAL_TOKEN` of at least 32 characters in the ignored root `.env`. `npm run dev` then starts React, Express and FastAPI together. Never commit or share either file.
+   On Windows, use `.venv\Scripts\python.exe`.
 
-The browser never calls FastAPI directly. Express authenticates the user, verifies class membership and supplies trusted course material. FastAPI performs course-scoped retrieval, routing, generation, citation checks and review. Existing assessment/content jobs use the same private sidecar while retaining their durable SQLite workflow and Zod output validation.
+2. Copy `apps/backend/.env.example` to `apps/backend/.env` and add the QuantumBlack gateway credentials.
+3. In the root `.env`, set `AI_SERVICE_URL=http://127.0.0.1:8001` and `AI_INTERNAL_TOKEN` to a random value of at least 32 characters.
 
-The model ID in the example was checked against the live gateway catalog during implementation. You can change it to another supported provider/model ID.
+`npm run dev` then starts the client, Express and the AI service together. Both `.env` files are ignored by Git; never commit credentials.
 
-[Gateway API documentation](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions).
+## Configuration
 
-## Structure
+All variables are listed in [.env.example](.env.example). Express validates them at startup and exits with a list of any that are invalid. The backend variables, their defaults and the error and logging formats are documented in [apps/backend/README.md](apps/backend/README.md).
 
-- `apps/frontend/src/pages/`: React landing, authentication, teacher and student screens.
-- `apps/frontend/src/components/`: shared typed UI and notices.
-- `apps/frontend/src/layouts/`: separate teacher sidebar and student top-bar experiences.
-- `apps/frontend/src/services/`: typed API client and session handling.
-- `apps/backend/src/agents/`: Diagnostic, Assessment, Content, model adapter and validation schemas.
-- `apps/backend/app/ai/`: FastAPI sidecar, orchestrator, Python agents, RAG and QuantumBlack client.
-- `apps/backend/src/jobs.ts`: durable generation queue with restart recovery.
-- `apps/backend/src/app.ts`: validated, role-protected API endpoints.
-- `apps/backend/src/db.ts`: SQLite transactions and atomic on-disk persistence.
-- `apps/backend/src/migrations/`: reversible schema migrations; `data/schema.sql` is the generated schema they produce.
-- `.runtime/gap.sqlite`: local database, excluded from Git.
-- `docs/architecture.md`: architecture and implementation boundaries.
+## Development
 
-Authentication uses scrypt password hashes, random session tokens stored as hashes, HttpOnly cookies, expiration, login rate limits, and same-origin checks. Every teacher operation verifies class ownership; every student operation verifies enrollment or gap ownership. Unpublished answer keys and uncertain scores are omitted from student responses.
+| Command                 | Purpose                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| `npm run dev`           | Client, API and, when configured, the AI service        |
+| `npm run check:backend` | Backend type check, lint, format check, tests and scans |
+| `npm run test:coverage` | Backend tests with coverage thresholds, as run in CI    |
+| `npm run test:student`  | Client unit tests                                       |
+| `npm run typecheck`     | Type check for client and API                           |
+| `npm run db -- status`  | Migration status; also `migrate`, `rollback`, `schema`  |
+| `npm run build`         | Production build of client and API                      |
 
-## Validation and production build
+AI service tests:
 
 ```sh
-npm run typecheck
-npm test
+cd apps/backend
+.venv/bin/python -m pip install -r requirements-ai-dev.txt
+.venv/bin/python -m pytest tests/ai
+```
+
+Git hooks installed by `npm ci` check backend changes and commit messages. CI runs the backend checks on pull requests that change backend files.
+
+## Project layout
+
+```
+apps/
+  frontend/          React client
+  backend/
+    src/             Express API: routes, services, repositories, migrations
+    src/agents/      Assessment, content and diagnostic logic and model adapters
+    app/ai/          FastAPI AI service: routing, agents, retrieval, gateway client
+    openapi.yaml     HTTP API contract
+    tests/ai/        AI service tests
+data/schema.sql      Generated database schema, for reference
+docs/                Architecture and student workspace notes
+```
+
+## Deployment
+
+```sh
+npm ci
 npm run build
 npm start
 ```
 
-`npm start` serves the compiled application at http://localhost:3001 (or API_PORT). For HTTPS hosting, set NODE_ENV=production, APP_ORIGIN, API_HOST and an explicit DEMO_PASSWORD before seeding. Deploy the Node application with a persistent writable disk; this backend is not a static-only deployment.
+`npm start` migrates the database and serves the API and the built client from one process. Set `NODE_ENV=production`, `DEMO_PASSWORD`, and a `DATABASE_PATH` on persistent storage. Behind a load balancer, set `TRUST_PROXY`. The operations runbook is in [apps/backend/README.md](apps/backend/README.md#operations).
+## Current limitations
 
-The SQLite export store and task runner support one Node process. Multiple replicas or heavy concurrency need a shared database and external queue. There is no public registration, password-reset flow, OCR, or real school roster integration yet.
+- One API process per database file: SQLite is held in memory and written to disk on each change, and background jobs run in process. Horizontal scaling needs a shared database and an external job queue.
 
-The previous hosted static URL has not been replaced by this Node application. The rebuilt full-stack version runs locally until deployed to a Node-compatible host.
+- The AI service keeps its retrieval index in memory and rebuilds it when course material changes.
 
-### QuantumBlack gateway
+- Teachers can import TXT, PDF, DOCX and PPTX course materials through the client. The extracted text is saved as course material, but the original uploaded documents are not persisted as separate document records.
 
-Set QB_CLIENT_ID and QB_CLIENT_SECRET in the ignored server .env file, or AZURE_OPENAI_API_KEY / QB_GATEWAY_TOKEN. QB_GATEWAY_ENDPOINT, QB_GATEWAY_MODEL and QB_GATEWAY_API_VERSION override the supplied defaults. QuantumBlack takes priority over Vercel when configured. Restart the server after changing credentials. Quiz generation, grading and explanations use validated JSON; provider failures are reported without silent fallback. Credentials stay out of the frontend and Git.
+- Scanned or image-only PDFs require OCR before import; OCR is not implemented yet.
 
-### Class dashboards and invitations
+- There is no self-service registration or password reset.
 
-Teachers land on /teacher and can create a class with an optional syllabus. Each class receives a unique eight-character invitation code, shown on its card and inside the teacher workspace. Students land on /student and join through that code; repeated joins do not duplicate membership. Class links retain the selected classroom, and the backend validates membership before returning class-specific student activity. Existing databases migrate automatically without removing data.
+- There is no real school roster integration yet.
