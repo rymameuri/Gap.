@@ -85,7 +85,9 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     }
   }
   return (
-    <div className="class-dashboard">
+    <div
+      className={`class-dashboard ${role === "teacher" ? "teacher-dashboard" : ""}`}
+    >
       <header className="class-dash-header">
         <Brand />
         <div className="student-identity">
@@ -111,16 +113,20 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
         <div className="class-dash-title">
           <div>
             <div className="eyebrow">
-              {role === "teacher" ? "YOUR CLASSROOMS" : "YOUR LEARNING SPACE"}
+              {role === "teacher" ? "TEACHER WORKSPACE" : "YOUR LEARNING SPACE"}
             </div>
-            <h1>
-              A place for every
-              <br />
-              <em>new possibility.</em>
-            </h1>
+            {role === "teacher" ? (
+              <h1>Courses</h1>
+            ) : (
+              <h1>
+                A place for every
+                <br />
+                <em>new possibility.</em>
+              </h1>
+            )}
             <p>
               {role === "teacher"
-                ? "Bring your students together. Help every idea click."
+                ? "Open a course to manage materials, assessments, and student progress."
                 : "Your classes, your next steps, your next aha."}
             </p>
           </div>
@@ -133,7 +139,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
             }}
           >
             <Plus size={17} />
-            {role === "teacher" ? "Create a new class" : "Join class"}
+            {role === "teacher" ? "Create class" : "Join class"}
           </button>
         </div>
         {error && <ErrorBox message={error} />}
@@ -158,13 +164,11 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
         {form && (
           <section className="class-form panel" ref={formRef}>
             <h2>
-              {role === "teacher"
-                ? "Start a new classroom"
-                : "Find your classroom"}
+              {role === "teacher" ? "Create a class" : "Find your classroom"}
             </h2>
             <p>
               {role === "teacher"
-                ? "We’ll create a unique invitation code for you."
+                ? "A unique join code will be created for your students."
                 : "Enter the eight-character code shared by your teacher."}
             </p>
             <form onSubmit={submit}>
@@ -182,8 +186,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                     placeholder="e.g. Introduction to Physics"
                   />
                   <label htmlFor="new-class-syllabus">
-                    Syllabus text{" "}
-                    <span className="muted">(optional)</span>
+                    Syllabus text <span className="muted">(optional)</span>
                   </label>
                   <textarea
                     id="new-class-syllabus"
@@ -205,25 +208,33 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                       if (!file) return;
                       try {
                         if (file.size > 200_000) {
-                          setImportError("Choose a text file smaller than 200 KB.");
+                          setImportError(
+                            "Choose a text file smaller than 200 KB.",
+                          );
                           return;
                         }
                         const content = await file.text();
                         if (content.length > 50_000) {
-                          setImportError("Syllabus text must be 50,000 characters or fewer.");
+                          setImportError(
+                            "Syllabus text must be 50,000 characters or fewer.",
+                          );
                           return;
                         }
                         setSyllabus(content);
                         setImportError("");
                       } catch {
-                        setImportError("Could not read that file. Try another .txt file.");
+                        setImportError(
+                          "Could not read that file. Try another .txt file.",
+                        );
                       } finally {
                         event.target.value = "";
                       }
                     }}
                   />
                   {importError && <p role="alert">{importError}</p>}
-                  <p className="muted">PDF and DOCX imports are not available yet.</p>
+                  <p className="muted">
+                    PDF and DOCX imports are not available yet.
+                  </p>
                 </>
               ) : (
                 <>
@@ -289,7 +300,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                 </Link>
                 <div className="course-card-body">
                   <span className="eyebrow">
-                    {role === "teacher" ? "CLASSROOM" : course.teacher_name}
+                    {role === "teacher" ? "COURSE" : course.teacher_name}
                   </span>
                   <h3>
                     <Link to={classPath(role, course.id)}>{course.name}</Link>
@@ -325,13 +336,11 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                 <Plus size={24} />
               </span>
               <strong>
-                {role === "teacher"
-                  ? "Create a new class"
-                  : "Join another class"}
+                {role === "teacher" ? "Create class" : "Join another class"}
               </strong>
               <span>
                 {role === "teacher"
-                  ? "Make room for the next aha."
+                  ? "A join code is generated automatically."
                   : "Good things start with a code."}
               </span>
             </button>

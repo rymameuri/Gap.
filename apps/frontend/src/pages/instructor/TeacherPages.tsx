@@ -84,13 +84,8 @@ export function Overview() {
     <div className="teacher-overview">
       <div className="overview-heading">
         <div>
-          <div className="eyebrow">CLASS OVERVIEW</div>
-          <h1>
-            A clearer picture of <em>learning.</em>
-          </h1>
-          <p>
-            Understanding, progress, and the students who need your attention.
-          </p>
+          <h1>Class overview</h1>
+          <p>Review enrollment, learning gaps, and work awaiting review.</p>
         </div>
         <Link className="btn primary" to="/teacher/assessments">
           Create assessment <ArrowUpRight size={16} />
@@ -363,7 +358,7 @@ export function Assessments() {
     <>
       <Title
         label="ASSESSMENT"
-        heading="Check understanding."
+        heading="Assessments"
         description="Choose a course topic, then review every question before publishing."
       />
       {action.error && <ErrorBox message={action.error} />}
@@ -642,8 +637,8 @@ export function ReviewQueue() {
     <>
       <Title
         label="TEACHER REVIEW"
-        heading="A little human judgment."
-        description="Uncertain grades stay unpublished until you review them."
+        heading="Grades for review"
+        description="Check uncertain scores and publish feedback to students."
       />
       {data.reviews.length ? (
         data.reviews.map((r) => <ReviewCard key={r.id} review={r} />)
@@ -685,7 +680,7 @@ export function ContentStudio() {
     <>
       <Title
         label="CONTENT STUDIO"
-        heading="A different way to explain."
+        heading="Explanations and follow-ups"
         description="Approve focused explanations and follow-up questions before students receive them."
       />
       {action.error && <ErrorBox message={action.error} />}
@@ -810,7 +805,7 @@ export function Materials() {
     <>
       <Title
         label="CLASS SETUP"
-        heading="Class materials."
+        heading="Class materials"
         description="Ground assessments and explanations in your syllabus."
       />
       {action.error && <ErrorBox message={action.error} />}
@@ -963,7 +958,7 @@ export function AgentActivity() {
     <>
       <Title
         label="THE LEARNING LOOP"
-        heading="Decisions you can follow."
+        heading="Agent activity"
         description="A durable record of agent work, teacher approvals, and student outcomes."
       />
       <section className="panel">

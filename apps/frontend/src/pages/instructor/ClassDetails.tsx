@@ -17,7 +17,7 @@ export function Students() {
     <>
       <Title
         label="CLASS ROSTER"
-        heading="Your students."
+        heading="Students"
         description="Class members, learning gaps, and participation."
       />
       <div className="detail-toolbar">
@@ -107,7 +107,7 @@ export function GapDetails() {
     <>
       <Title
         label="LEARNING RECORDS"
-        heading={topic || "Learning gap details."}
+        heading={topic || "Learning gaps"}
         description="Individual student outcomes, backed by assessment and recheck records."
       />
       <div className="detail-toolbar">
