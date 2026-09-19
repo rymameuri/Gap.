@@ -25,6 +25,7 @@ export interface StudentGapRow extends GapRow {
 export interface ApprovedGapRow extends GapRow {
   probe: string;
   content: string;
+  approved_at: string;
 }
 
 export interface ProgressRow extends ProbeRow {
@@ -83,7 +84,7 @@ export const findApprovedGapForStudent = (
   studentId: string,
 ): ApprovedGapRow | undefined =>
   store.one<ApprovedGapRow>(
-    "SELECT g.*,i.probe,i.content FROM gaps g JOIN interventions i ON i.id=g.intervention_id AND i.status='approved' WHERE g.id=? AND g.student_id=?",
+    "SELECT g.*,i.probe,i.content,i.approved_at FROM gaps g JOIN interventions i ON i.id=g.intervention_id AND i.status='approved' WHERE g.id=? AND g.student_id=?",
     [gapId, studentId],
   );
 
@@ -111,6 +112,18 @@ export function setGapStatus(
     gapId,
   ]);
 }
+
+/** True when the student answered a follow-up on this gap at or after `since`. */
+export const hasAnsweredSince = (
+  store: Store,
+  gapId: string,
+  studentId: string,
+  since: string,
+): boolean =>
+  store.one(
+    "SELECT 1 FROM probes WHERE gap_id=? AND student_id=? AND created_at>=?",
+    [gapId, studentId, since],
+  ) !== undefined;
 
 export function insertProbe(store: Store, row: ProbeRow): void {
   store.run("INSERT INTO probes VALUES(?,?,?,?,?,?)", [

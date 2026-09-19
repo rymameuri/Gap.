@@ -528,6 +528,10 @@ paths:
     post:
       operationId: recheckGap
       tags: [student]
+      description: |
+        One answer per explanation. A correct answer resolves the gap; a wrong
+        one marks it struggling, and further answers return 409 until the
+        teacher approves a new explanation with a new question.
       requestBody:
         required: true
         content:
