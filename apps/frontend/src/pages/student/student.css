@@ -823,12 +823,31 @@
   max-height: 240px;
   width: 100%;
   line-height: 1.6;
-  padding: 15px 52px 15px 16px;
+  padding: 15px 94px 15px 16px;
   border: 1px solid #cbd2d8;
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 5px 18px #2936460a;
   resize: vertical;
+}
+.s-composer-voice {
+  position: absolute;
+  right: 54px;
+  bottom: 12px;
+}
+.s-composer-voice .speech-input-button {
+  width: 34px;
+  height: 34px;
+  background: #f5f7f9;
+  border-color: #d9dee3;
+}
+.s-composer-voice .speech-input-button:hover:not(:disabled) {
+  background: #e8ecef;
+}
+.s-composer-voice .speech-input-button.is-listening {
+  color: #9b2c2c;
+  border-color: #e5abab;
+  background: #fff0ef;
 }
 .s-composer-submit {
   position: absolute;

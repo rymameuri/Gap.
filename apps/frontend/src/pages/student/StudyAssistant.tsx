@@ -20,6 +20,8 @@ import type { StudyAssistantResponse } from "../../services/types";
 import { courseTopics, errorMessage } from "./course-model";
 import { useStudyDrafts, type StudyDraft } from "./useStudyDrafts";
 import { MaterialReader } from "./components/MaterialReader";
+import { SpeechInputButton } from "../../components/SpeechInputButton";
+import { appendSpeechTranscript } from "../../components/speech-recognition";
 
 function InstructorQuestion({ courseId }: { courseId: string }) {
   const [question, setQuestion] = useState("");
@@ -340,6 +342,16 @@ export function StudyAssistant() {
                     if (text.trim()) event.currentTarget.form?.requestSubmit();
                   }
                 }}
+              />
+              <SpeechInputButton
+                className="s-composer-voice"
+                label="Dictate a message to Study Assistant"
+                disabled={busy}
+                onTranscript={(transcript) =>
+                  setText((currentText) =>
+                    appendSpeechTranscript(currentText, transcript),
+                  )
+                }
               />
               <button
                 className="s-composer-submit"
