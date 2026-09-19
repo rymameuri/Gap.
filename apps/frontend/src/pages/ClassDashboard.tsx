@@ -27,6 +27,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     [busy, setBusy] = useState(false),
     [name, setName] = useState(""),
     [syllabus, setSyllabus] = useState(""),
+    [importError, setImportError] = useState(""),
     [code, setCode] = useState(""),
     [created, setCreated] = useState<ClassCard | null>(null);
   const formRef = useRef<HTMLElement>(null);
@@ -68,6 +69,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
         });
         setName("");
         setSyllabus("");
+        setImportError("");
         setForm(false);
         await load();
       } else {
@@ -191,6 +193,37 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                     rows={6}
                     placeholder="Paste course topics, readings, and learning objectives"
                   />
+                  <label htmlFor="new-class-syllabus-file">
+                    Or import a syllabus (.txt)
+                  </label>
+                  <input
+                    id="new-class-syllabus-file"
+                    type="file"
+                    accept=".txt,text/plain"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        if (file.size > 200_000) {
+                          setImportError("Choose a text file smaller than 200 KB.");
+                          return;
+                        }
+                        const content = await file.text();
+                        if (content.length > 50_000) {
+                          setImportError("Syllabus text must be 50,000 characters or fewer.");
+                          return;
+                        }
+                        setSyllabus(content);
+                        setImportError("");
+                      } catch {
+                        setImportError("Could not read that file. Try another .txt file.");
+                      } finally {
+                        event.target.value = "";
+                      }
+                    }}
+                  />
+                  {importError && <p role="alert">{importError}</p>}
+                  <p className="muted">PDF and DOCX imports are not available yet.</p>
                 </>
               ) : (
                 <>
