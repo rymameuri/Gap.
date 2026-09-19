@@ -11,6 +11,7 @@ import {
   findApprovedGapForStudent,
   findGap,
   findIntervention,
+  hasAnsweredSince,
   insertProbe,
   markGapReady,
   setGapStatus,
@@ -92,9 +93,11 @@ export interface RecheckOutcome {
 }
 
 /**
- * Records a follow-up answer for the student's own gap. A correct answer
- * resolves the gap; a wrong one marks it struggling for teacher support.
- * @throws NotFoundError without an approved explanation, ConflictError once resolved, ZodError or
+ * Records the student's one answer to the follow-up of their gap's current
+ * explanation. A correct answer resolves the gap; a wrong one marks it
+ * struggling until the teacher approves a new explanation.
+ * @throws NotFoundError without an approved explanation, ConflictError once
+ * resolved or answered, ZodError or
  * BadRequestError when the answer is not an option.
  */
 export function recheckGap(
@@ -107,6 +110,12 @@ export function recheckGap(
   if (!gap) throw new NotFoundError("Teacher-approved explanation not found.");
   if (gap.status === "resolved")
     throw new ConflictError("This gap is already resolved.");
+  // One attempt per follow-up question: a wrong answer waits for the teacher
+  // to approve a new explanation, whose question the student has not seen.
+  if (hasAnsweredSince(store, gap.id, studentId, gap.approved_at))
+    throw new ConflictError(
+      "You already answered this follow-up. Your teacher will share another explanation.",
+    );
   const { answer } = recheckBody.parse(input);
   const probe = parseQuestion(gap.probe);
   if (!probe.options.includes(answer))
