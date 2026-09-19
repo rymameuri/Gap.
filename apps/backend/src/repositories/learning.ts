@@ -20,6 +20,7 @@ export interface StudentGapRow extends GapRow {
   probe: string | null;
   content_status: string | null;
   class_name: string;
+  resolved_by_submission_id: string | null;
 }
 
 export interface ApprovedGapRow extends GapRow {
@@ -47,7 +48,7 @@ export const openClusters = (store: Store, classId: string): ClusterRow[] =>
 
 export const studentGaps = (store: Store, studentId: string): StudentGapRow[] =>
   store.all<StudentGapRow>(
-    "SELECT g.*,i.content,i.probe,i.status AS content_status,c.name AS class_name FROM gaps g JOIN classes c ON c.id=g.class_id LEFT JOIN interventions i ON i.id=g.intervention_id AND i.status='approved' WHERE g.student_id=? ORDER BY g.updated_at DESC",
+    "SELECT g.*,i.content,i.probe,i.status AS content_status,c.name AS class_name,r.submission_id AS resolved_by_submission_id FROM gaps g JOIN classes c ON c.id=g.class_id LEFT JOIN interventions i ON i.id=g.intervention_id AND i.status='approved' LEFT JOIN gap_resolutions r ON r.gap_id=g.id WHERE g.student_id=? ORDER BY g.updated_at DESC",
     [studentId],
   );
 

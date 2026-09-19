@@ -194,6 +194,23 @@ test("only published full-credit topic results count as independent evidence", (
   );
 });
 
+test("a later full-credit assessment resolves the old gap as independent evidence", () => {
+  const result = topicEvidence(
+    "Motion",
+    selectCourse(
+      {
+        ...empty,
+        grades: [grade],
+        gaps: [
+          { ...gap, status: "resolved", resolved_by_submission_id: grade.id },
+        ],
+      },
+      course,
+    ),
+  );
+  assert.equal(result.status, "independent");
+});
+
 test("an unresolved assessment gap is not hidden by an older correct quiz", () => {
   assert.equal(
     topicEvidence(

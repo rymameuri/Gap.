@@ -94,7 +94,9 @@ describe("migrate", () => {
     const before = store.all(
       "SELECT id,name,syllabus FROM classes ORDER BY id",
     );
-    assert.deepEqual(rollback(store, 2), [
+    assert.deepEqual(rollback(store, 4), [
+      "0005-learning-records",
+      "0004-gap-resolutions",
       "0003-backfill-join-codes",
       "0002-class-join-code",
     ]);
@@ -175,7 +177,11 @@ describe("join code backfill", () => {
     store.run(
       "INSERT INTO classes(id,teacher_id,name,syllabus) VALUES('c1','t1','Physics','Units')",
     );
-    assert.deepEqual(migrate(store).applied, ["0003-backfill-join-codes"]);
+    assert.deepEqual(migrate(store).applied, [
+      "0003-backfill-join-codes",
+      "0004-gap-resolutions",
+      "0005-learning-records",
+    ]);
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",
     );
@@ -200,7 +206,11 @@ describe("legacy databases", () => {
     const result = migrate(store);
     assert.deepEqual(result, {
       adopted: ["0001-baseline", "0002-class-join-code"],
-      applied: ["0003-backfill-join-codes"],
+      applied: [
+        "0003-backfill-join-codes",
+        "0004-gap-resolutions",
+        "0005-learning-records",
+      ],
     });
     const course = store.one<{ name: string; join_code: string }>(
       "SELECT name,join_code FROM classes WHERE id='c1'",
@@ -216,7 +226,12 @@ describe("legacy databases", () => {
     const result = migrate(store);
     assert.deepEqual(result, {
       adopted: ["0001-baseline"],
-      applied: ["0002-class-join-code", "0003-backfill-join-codes"],
+      applied: [
+        "0002-class-join-code",
+        "0003-backfill-join-codes",
+        "0004-gap-resolutions",
+        "0005-learning-records",
+      ],
     });
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",

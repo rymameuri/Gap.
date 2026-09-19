@@ -48,36 +48,16 @@ export function topicEvidence(
 } {
   const gaps = data.gaps.filter((gap) => gap.topic === topic);
   const gapIds = new Set(gaps.map((gap) => gap.id));
-  const latestProbe = data.progress
-    .filter((entry) => gapIds.has(entry.gap_id))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-  if (latestProbe) {
-    return latestProbe.correct
-      ? {
-          status: "supported",
-          detail: "Correct follow-up after an instructor explanation.",
-        }
-      : {
-          status: "practice",
-          detail: "The latest follow-up suggests another review would help.",
-        };
-  }
   if (gaps.some((gap) => gap.status !== "resolved")) {
     return {
       status: "practice",
       detail: "Your assessment identified a topic to revisit.",
     };
   }
-  if (gaps.some((gap) => gap.status === "resolved")) {
-    return {
-      status: "supported",
-      detail: "Follow-up completed after an instructor explanation.",
-    };
-  }
-  const results = data.grades
+  const latestGrade = data.grades
     .flatMap((grade) => {
       const quiz = data.quizzes.find((item) => item.id === grade.quiz_id);
-      return grade.results.flatMap((result) => {
+      const results = grade.results.flatMap((result) => {
         const question = quiz?.questions.find(
           (item) => item.id === result.questionId && item.topic === topic,
         );
@@ -85,25 +65,41 @@ export function topicEvidence(
           ? [
               {
                 correct: result.score === question.maxPoints,
-                date: grade.created_at,
               },
             ]
           : [];
       });
+      return results.length
+        ? [{ id: grade.id, date: grade.created_at, results }]
+        : [];
     })
-    .sort((a, b) => b.date.localeCompare(a.date));
-  if (results.length) {
-    const latest = results.filter((result) => result.date === results[0].date);
-    return latest.every((result) => result.correct)
-      ? {
-          status: "independent",
-          detail:
-            "Full credit on the latest published quiz questions for this topic.",
-        }
-      : {
-          status: "practice",
-          detail: "Review the feedback on your latest quiz.",
-        };
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (latestGrade) {
+    if (!latestGrade.results.every((result) => result.correct))
+      return {
+        status: "practice",
+        detail: "Review the feedback on your latest quiz.",
+      };
+    if (gaps.every((gap) => gap.resolved_by_submission_id === latestGrade.id))
+      return {
+        status: "independent",
+        detail:
+          "Full credit on the latest published quiz questions for this topic.",
+      };
+  }
+  const latestProbe = data.progress
+    .filter((entry) => gapIds.has(entry.gap_id))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  if (latestProbe && !latestProbe.correct)
+    return {
+      status: "practice",
+      detail: "The latest follow-up suggests another review would help.",
+    };
+  if (gaps.length > 0) {
+    return {
+      status: "supported",
+      detail: "Follow-up completed after an instructor explanation.",
+    };
   }
   return {
     status: "unassessed",

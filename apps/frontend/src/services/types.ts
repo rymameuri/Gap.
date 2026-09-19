@@ -40,6 +40,7 @@ export type Gap = {
   class_name?: string;
   student_name?: string;
   student_id: string;
+  resolved_by_submission_id?: string | null;
   content?: string;
   probe?: Question;
 };

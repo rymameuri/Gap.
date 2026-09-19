@@ -132,6 +132,7 @@ export function recheckGap(
       created_at: now(),
     });
     setGapStatus(store, gap.id, status, now());
+    store.run("DELETE FROM gap_resolutions WHERE gap_id=?", [gap.id]);
     store.event(
       gap.class_id,
       "Content",

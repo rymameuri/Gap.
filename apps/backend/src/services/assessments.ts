@@ -126,6 +126,7 @@ export function approveReview(
       questions,
       results,
       "Reviewed assessment",
+      submission.id,
     );
     store.event(
       submission.class_id,
@@ -218,6 +219,7 @@ export async function submitQuiz(
         questions,
         results,
         quiz.title,
+        id,
       );
       diagnose(store, quiz.class_id, studentId);
     }
