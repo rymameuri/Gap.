@@ -68,7 +68,7 @@ export function MaterialFileImport({
       setNotice(
         "Imported " +
           file.name +
-          ". Review the text above, then select Save materials.",
+          ". Review the text above, then select Save syllabus.",
       );
     } catch (reason) {
       if (!controller.signal.aborted)

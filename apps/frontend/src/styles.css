@@ -264,6 +264,90 @@ p {
 .course-files-list button:hover {
   background: #eef0f3;
 }
+.material-section {
+  padding: 4px 0 28px;
+}
+.material-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.material-section-heading h2 {
+  margin: 0;
+}
+.material-section-heading p {
+  margin: 6px 0 0;
+  color: #667078;
+  font-size: 14px;
+}
+.material-version {
+  flex: 0 0 auto;
+  color: #67736c;
+  font-size: 13px;
+}
+.material-section textarea {
+  min-height: 220px;
+}
+.material-section .actions {
+  margin-top: 22px;
+}
+.course-settings {
+  padding: 18px 0 32px;
+  border-top: 1px solid #e5e5e9;
+}
+.course-settings summary,
+.enrollment-tools summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.course-settings form {
+  max-width: 590px;
+}
+.course-name-row,
+.enrollment-form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.course-name-row .btn,
+.enrollment-form-row .btn {
+  flex: 0 0 auto;
+}
+.enrollment-section {
+  margin: 18px 0 28px;
+}
+.enrollment-tools {
+  padding: 16px 0;
+  border-top: 1px solid #e5e5e9;
+  border-bottom: 1px solid #e5e5e9;
+}
+.enrollment-tools-content {
+  padding: 4px 0 0 20px;
+  max-width: 850px;
+}
+.enrollment-form-row {
+  max-width: 610px;
+}
+.enrollment-invitations {
+  padding-top: 20px;
+}
+.enrollment-invitations h2 {
+  font-size: 17px;
+}
+@media (max-width: 600px) {
+  .course-name-row,
+  .enrollment-form-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .material-section-heading {
+    flex-wrap: wrap;
+  }
+  .enrollment-tools-content {
+    padding-left: 0;
+  }
+}
 @media (max-width: 600px) {
   .course-files-heading {
     flex-wrap: wrap;

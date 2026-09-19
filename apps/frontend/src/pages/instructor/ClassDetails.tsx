@@ -1,8 +1,158 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ClassLink as Link } from "../../components/ClassLink";
+import { RosterImport } from "../../components/RosterImport";
 import { useTeacher } from "../../layouts/workspace";
-import { Title, Badge } from "../../components/ui";
+import { post } from "../../services/api";
+import { Title, Badge, ErrorBox, useNotice } from "../../components/ui";
+
+function EnrollmentTools() {
+  const { data, refresh } = useTeacher();
+  const notice = useNotice();
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pending = data.invitations.filter(
+    (invitation) => invitation.status === "pending",
+  ).length;
+
+  async function act(request: () => Promise<void>, success: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await request();
+      await refresh();
+      notice(success);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The action could not be completed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      className="enrollment-section"
+      aria-labelledby="enrollment-heading"
+    >
+      <details className="enrollment-tools">
+        <summary id="enrollment-heading">Add students</summary>
+        <div className="enrollment-tools-content">
+          <form
+            className="enrollment-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(async () => {
+                await post("/teacher/classes/" + data.course.id + "/enroll", {
+                  email,
+                });
+                setEmail("");
+              }, "Student enrolled.");
+            }}
+          >
+            <label className="field" htmlFor="enroll-email">
+              Enroll an existing student
+            </label>
+            <div className="enrollment-form-row">
+              <input
+                id="enroll-email"
+                type="email"
+                required
+                placeholder="Student account email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+              <button className="btn" disabled={busy}>
+                Enroll student
+              </button>
+            </div>
+          </form>
+          <RosterImport
+            key={data.course.id}
+            courseId={data.course.id}
+            onInvited={async (invited) => {
+              await refresh();
+              notice(
+                invited === 1
+                  ? "1 invitation sent."
+                  : `${invited} invitations sent.`,
+              );
+            }}
+          />
+          {error && <ErrorBox message={error} />}
+        </div>
+      </details>
+      {data.invitations.length > 0 && (
+        <div className="enrollment-invitations">
+          <h2>
+            Invitations{" "}
+            {pending > 0 && <span className="muted">({pending} pending)</span>}
+          </h2>
+          <div className="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Status</th>
+                  <th>
+                    <span className="sr-only">Action</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.invitations.map((invitation) => (
+                  <tr key={invitation.id}>
+                    <td>
+                      {invitation.name && <strong>{invitation.name}</strong>}
+                      <div className="muted">{invitation.email}</div>
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          "badge " +
+                          (invitation.status === "pending" ? "sent" : "open")
+                        }
+                      >
+                        {invitation.status === "pending"
+                          ? "Pending"
+                          : "Declined"}
+                      </span>
+                    </td>
+                    <td>
+                      {invitation.status === "pending" && (
+                        <button
+                          type="button"
+                          className="btn small"
+                          disabled={busy}
+                          onClick={() =>
+                            void act(async () => {
+                              await post(
+                                "/teacher/invitations/" +
+                                  invitation.id +
+                                  "/revoke",
+                              );
+                            }, "Invitation revoked.")
+                          }
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function Students() {
   const { data } = useTeacher();
   const [params, setParams] = useSearchParams();
@@ -20,6 +170,7 @@ export function Students() {
         heading="Students"
         description="Class members, learning gaps, and participation."
       />
+      <EnrollmentTools />
       <div className="detail-toolbar">
         <label htmlFor="roster-search">Find a student</label>
         <input
