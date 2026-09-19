@@ -30,6 +30,8 @@ function LessonContent({ gap }: { gap: Gap }) {
   const [result, setResult] = useState<{ correct: boolean } | null>(null);
   const [error, setError] = useState("");
   const completed = result?.correct || gap.status === "resolved";
+  const awaitingSupport =
+    result?.correct === false || gap.status === "struggling";
   return (
     <>
       <Link className="s-back" to={coursePath(course.id, "practice")}>
@@ -79,6 +81,17 @@ function LessonContent({ gap }: { gap: Gap }) {
                 </p>
               </div>
             </div>
+          ) : awaitingSupport ? (
+            <div className="s-feedback" role="status">
+              <div>
+                <strong>Waiting for instructor support</strong>
+                <p>
+                  Your answer showed this topic needs another look. Your
+                  instructor can review it and share a new follow-up. You can
+                  still revisit the explanation above.
+                </p>
+              </div>
+            </div>
           ) : (
             <form
               onSubmit={async (event) => {
@@ -123,14 +136,6 @@ function LessonContent({ gap }: { gap: Gap }) {
                 <ArrowRight size={16} />
               </button>
             </form>
-          )}
-          {result && !result.correct && (
-            <div className="s-feedback" role="status">
-              <p>
-                Not quite. Revisit the explanation and try again. Your
-                instructor has received the result and can offer more support.
-              </p>
-            </div>
           )}
           {error && <ErrorBox message={error} />}
           <Link
