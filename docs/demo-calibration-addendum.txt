@@ -1,0 +1,8 @@
+Luma calibration addendum - fictional demo course
+
+This approved course file contains additional facts not in the syllabus.
+The calibration gain for sensor LUMA-DELTA is exactly 0.375.
+The calibration checksum word is cobalt-seven.
+For two humidity samples A and B, the mean reading R is R = (A + B) / 2.
+For A = 38 percent and B = 40 percent, R = 39 percent.
+Do not confuse calibration gain with the 42 percent humidity target.

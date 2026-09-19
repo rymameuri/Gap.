@@ -1,0 +1,23 @@
+Greenhouse control lab - fictional demo course
+
+Unit 1: Luma greenhouse control protocol
+The target humidity is 42 percent.
+The control cycle has three ordered steps: Sample, Compare, Adjust.
+Sample: read the humidity sensor twice, one minute apart.
+Compare: compare both readings with the 42 percent target.
+Adjust: add water only when both readings are below target.
+Each cycle may add at most 7 milliliters of water.
+If only one reading is below target, sample again instead of watering.
+Raise the orange flag after two consecutive below-target readings.
+If readings differ by more than 5 percentage points, raise the violet flag,
+stop, and ask the supervisor to inspect the sensor.
+
+Learning objectives
+Recall the target and water limit.
+Apply Sample, Compare, Adjust in the correct order.
+Distinguish a below-target condition from a sensor disagreement.
+Explain why acting on one reading can cause unnecessary watering.
+
+Examples
+Readings 38 and 40: both below 42, difference 2. Orange flag; at most 7 mL.
+Readings 39 and 43: only one below target. Sample again; do not water.

@@ -1,5 +1,8 @@
 # Fix ownership map (2026-09-19)
 
+Historical ownership map. See the [final pre-demo review](final-pre-demo-review.md)
+for current findings after the rymedits merge and live end-to-end checks.
+
 This map builds on the [interactive audit](demo-readiness-audit.md). "Fixed"
 means the code is pushed and the relevant checks passed. "Open" means the
 behavior or verification still needs work. The backend/data update was checked

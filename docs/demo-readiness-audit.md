@@ -1,5 +1,8 @@
 # Demo readiness audit (2026-09-19)
 
+Historical audit. The [final pre-demo review](final-pre-demo-review.md) includes
+the later live tests and merged branch features and supersedes this status.
+
 This records the original walkthrough. See the [updated fix ownership map](fix-ownership-map.md)
 for current implementation status after the backend/data work.
 
