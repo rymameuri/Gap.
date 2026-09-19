@@ -118,3 +118,20 @@ def test_student_class_scope_is_denied_without_llm() -> None:
     assert decision.denied is True
     assert decision.target_agent == AgentName.ORCHESTRATOR
     assert fake.calls == 0
+
+def test_open_ended_study_channel_request_defaults_to_study_agent() -> None:
+    fake = FakeLLMClient(
+        '{"intent":"unknown","reason":"unused"}'
+    )
+    request = make_request("Build me a revision plan from this material").model_copy(
+        update={"metadata": {"channel": "study_assistant"}}
+    )
+
+    decision = asyncio.run(
+        route_request_intelligently(request, fake)
+    )
+
+    assert decision.intent == Intent.ANSWER_QUESTION
+    assert decision.target_agent == AgentName.STUDY
+    assert decision.requires_clarification is False
+    assert fake.calls == 0

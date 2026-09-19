@@ -78,7 +78,7 @@ npm start
 
 `npm start` serves the compiled application at http://localhost:3001 (or API_PORT). For HTTPS hosting, set NODE_ENV=production, APP_ORIGIN, API_HOST and an explicit DEMO_PASSWORD before seeding. Deploy the Node application with a persistent writable disk; this backend is not a static-only deployment.
 
-The SQLite export store and task runner support one Node process. Multiple replicas or heavy concurrency need a shared database and external queue. There is no public registration, password-reset flow, PDF parsing, or real school roster integration yet.
+The SQLite export store and task runner support one Node process. Multiple replicas or heavy concurrency need a shared database and external queue. There is no public registration, password-reset flow, OCR, or real school roster integration yet.
 
 The previous hosted static URL has not been replaced by this Node application. The rebuilt full-stack version runs locally until deployed to a Node-compatible host.
 

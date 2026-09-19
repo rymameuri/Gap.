@@ -147,6 +147,7 @@ def test_study_indexes_each_material_version_once() -> None:
     assert len(service.requests) == 3
     assert service.requests[0].role is UserRole.STUDENT
     assert service.requests[0].metadata["material_version"] == 1
+    assert service.requests[0].metadata["channel"] == "study_assistant"
     assert len(service.requests[0].history) == 2
     assert first.json() == {
         "content": "Momentum equals mass times velocity [S1].",

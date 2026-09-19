@@ -58,7 +58,7 @@ export const studyAssistantBody = z.object({
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(10_000),
+        content: z.string().min(1).max(16_000),
       }),
     )
     .max(20)

@@ -195,6 +195,45 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/teacher/classes/{id}/materials/import:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: filename
+        in: query
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    post:
+      operationId: importCourseMaterial
+      tags: [teacher]
+      description: Extract PDF, DOCX, PPTX or TXT into a preview. Teacher must own the class. Does not save materials; use the class update endpoint after reviewing the text. Upload limit is 25 MiB; extracted text limit is 50000 UTF-16 code units. Scanned PDFs require OCR before import.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: Extracted text ready for teacher review.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [text, sectionCount]
+                properties:
+                  text: { type: string, minLength: 10, maxLength: 50000 }
+                  sectionCount: { type: integer, minimum: 1 }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413":
+          description: Uploaded file or expanded Office document is too large.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /api/teacher/classes/{id}/enroll:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -475,7 +514,7 @@ paths:
                     required: [role, content]
                     properties:
                       role: { enum: [user, assistant] }
-                      content: { type: string, minLength: 1, maxLength: 10000 }
+                      content: { type: string, minLength: 1, maxLength: 16000 }
       responses:
         "200":
           description: A course-grounded answer or a safe review notice.

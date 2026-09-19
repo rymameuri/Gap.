@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, test } from "node:test";
 import {
   AIServiceRequestError,
+  DocumentImportError,
   PythonAIServiceClient,
 } from "./python-service.js";
 import { modelJSON } from "./provider.js";
@@ -50,6 +51,69 @@ afterEach(async () => {
 });
 
 describe("PythonAIServiceClient", () => {
+  test("sends exact document bytes with internal authentication", async () => {
+    const payload = Buffer.from([0, 255, 37, 80, 68, 70, 128]);
+    const url = await listen(async (request, response) => {
+      assert.equal(
+        request.url,
+        "/v1/documents/extract?filename=lecture%20one.pdf",
+      );
+      assert.equal(request.headers["x-manara-ai-token"], "private-token");
+      assert.equal(request.headers["content-type"], "application/octet-stream");
+      const parts: Buffer[] = [];
+      for await (const part of request)
+        parts.push(Buffer.from(part as Uint8Array));
+      assert.deepEqual(Buffer.concat(parts), payload);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          text: "Force equals mass times acceleration.",
+          section_count: 2,
+        }),
+      );
+    });
+    const result = await new PythonAIServiceClient({
+      url,
+      token: "private-token",
+    }).extractDocument("lecture one.pdf", payload);
+    assert.deepEqual(result, {
+      text: "Force equals mass times acceleration.",
+      sectionCount: 2,
+    });
+  });
+
+  test("maps known import errors and hides unknown sidecar details", async () => {
+    for (const [status, code, expected] of [
+      [400, "empty_document", DocumentImportError],
+      [413, "document_too_large", DocumentImportError],
+      [500, "private detail", AIServiceRequestError],
+      [400, "toString", AIServiceRequestError],
+    ] as const) {
+      const url = await listen(async (_request, response) => {
+        response.writeHead(status, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ detail: { code } }));
+      });
+      await assert.rejects(
+        new PythonAIServiceClient({
+          url,
+          token: "private-token",
+        }).extractDocument("file.pdf", new Uint8Array([1])),
+        expected,
+      );
+    }
+    const url = await listen(async (_request, response) => {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end("{}");
+    });
+    await assert.rejects(
+      new PythonAIServiceClient({
+        url,
+        token: "private-token",
+      }).extractDocument("file.pdf", new Uint8Array([1])),
+      AIServiceRequestError,
+    );
+  });
+
   test("authenticates and maps a grounded study response", async () => {
     let receivedToken = "";
     let receivedBody: unknown;

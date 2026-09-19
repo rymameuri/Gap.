@@ -6,7 +6,12 @@ import secrets
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.concurrency import run_in_threadpool
+
+from app.ai.rag.document_import import (
+    MAX_UPLOAD_BYTES, DocumentImportError, ImportedDocument, extract_document,
+)
 from pydantic import BaseModel, Field
 
 from app.ai.llm.client import (
@@ -163,6 +168,27 @@ def create_app(
     async def health(_: None = Depends(authorize)) -> dict[str, bool]:
         return {"ok": True}
 
+    @app.post("/v1/documents/extract", response_model=ImportedDocument)
+    async def import_document(
+        request: Request,
+        filename: str = Query(min_length=1, max_length=200),
+        _: None = Depends(authorize),
+    ) -> ImportedDocument:
+        if request.headers.get("content-type", "").split(";")[0] != "application/octet-stream":
+            raise HTTPException(400, detail={"code": "invalid_document"})
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > MAX_UPLOAD_BYTES:
+                raise HTTPException(413, detail={"code": "document_too_large"})
+            body.extend(chunk)
+        try:
+            return await run_in_threadpool(extract_document, bytes(body), filename)
+        except DocumentImportError as exc:
+            raise HTTPException(
+                413 if exc.code == "document_too_large" else 400,
+                detail={"code": exc.code},
+            ) from exc
+
     @app.post("/v1/study", response_model=StudyResponse)
     async def study(
         request: StudyRequest,
@@ -187,6 +213,7 @@ def create_app(
                 metadata={
                     "material_version": request.material_version,
                     "source": "express_backend",
+                    "channel": "study_assistant",
                 },
             )
         )

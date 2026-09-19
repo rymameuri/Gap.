@@ -1,4 +1,6 @@
-import type { Express } from "express";
+import express, { type Express } from "express";
+import { DOCUMENT_UPLOAD_LIMIT } from "../constants.js";
+import { importCourseMaterial } from "../services/material-import.js";
 import { teacherOnly } from "../auth.js";
 import { NotFoundError } from "../errors.js";
 import { asyncRoute } from "../http/middleware.js";
@@ -12,6 +14,7 @@ import {
 } from "../services/assessments.js";
 import {
   createClass,
+  requireOwnedClass,
   enrollByEmail,
   updateClass,
 } from "../services/classes.js";
@@ -25,7 +28,7 @@ import { param, queryString, type RouteContext } from "./context.js";
 
 export function registerTeacherRoutes(
   app: Express,
-  { store, queue }: RouteContext,
+  { store, queue, aiService }: RouteContext,
 ): void {
   const ok = { ok: true } as const;
 
@@ -38,6 +41,29 @@ export function registerTeacherRoutes(
     teacherOnly,
     asyncRoute((req, res) => {
       res.status(201).json(createClass(store, req.user.id, req.body));
+    }),
+  );
+
+  app.post(
+    "/api/teacher/classes/:id/materials/import",
+    teacherOnly,
+    (req, _res, next) => {
+      requireOwnedClass(store, req.user.id, param(req, "id"));
+      next();
+    },
+    express.raw({
+      type: "application/octet-stream",
+      limit: DOCUMENT_UPLOAD_LIMIT,
+      inflate: false,
+    }),
+    asyncRoute(async (req, res) => {
+      res.json(
+        await importCourseMaterial(
+          aiService,
+          queryString(req, "filename"),
+          req.body,
+        ),
+      );
     }),
   );
 

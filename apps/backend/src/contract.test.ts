@@ -38,6 +38,12 @@ const JOB_POLL_ATTEMPTS = 50;
 const JOB_POLL_INTERVAL_MS = 20;
 
 const contractAI: AIServiceClient = {
+  extractDocument() {
+    return Promise.resolve({
+      text: "Imported physics course material.",
+      sectionCount: 1,
+    });
+  },
   study() {
     return Promise.resolve({
       content: "A net force changes an object's velocity [S1].",
@@ -105,7 +111,12 @@ describe("API contract", () => {
   const call = async (
     operation: string,
     path: string,
-    init: { cookie?: string; body?: unknown } = {},
+    init: {
+      cookie?: string;
+      body?: unknown;
+      rawBody?: string;
+      headers?: Record<string, string>;
+    } = {},
   ): Promise<unknown> => {
     const method = operation.split(" ")[0] ?? "GET";
     return contract.check(
@@ -306,6 +317,46 @@ describe("API contract", () => {
         `/api/student/workspace?classId=${MISSING}`,
         { cookie: sara },
       );
+    });
+  });
+
+  describe("material import", () => {
+    const operation = "POST /api/teacher/classes/{id}/materials/import";
+    const path =
+      "/api/teacher/classes/physics/materials/import?filename=lecture.pdf";
+    const upload = {
+      rawBody: "%PDF-document",
+      headers: { "Content-Type": "application/octet-stream" },
+    };
+
+    test("documents previews, validation, ownership and upload limits", async () => {
+      await call(operation, path, { cookie: teacher, ...upload });
+      await call(operation, path.replace("lecture.pdf", "old.doc"), {
+        cookie: teacher,
+        ...upload,
+      });
+      await call(operation, path.replace("/physics/", "/missing/"), {
+        cookie: teacher,
+        ...upload,
+      });
+      await call(operation, path, {
+        cookie: teacher,
+        ...upload,
+        rawBody: "x".repeat(25 * 1024 * 1024 + 1),
+      });
+    });
+
+    test("documents an unavailable document reader", async () => {
+      const server = await startTestServer({}, null);
+      try {
+        const cookie = await server.login(TEACHER);
+        contract.check(
+          operation,
+          await server.request(path, { method: "POST", cookie, ...upload }),
+        );
+      } finally {
+        await server.close();
+      }
     });
   });
 

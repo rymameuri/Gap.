@@ -67,6 +67,26 @@ class InMemoryCourseRetriever:
     def course_chunk_count(self, course_id: str) -> int:
         return len(self._chunks_by_course.get(course_id, []))
 
+    def course_overview(
+        self,
+        course_id: str,
+        limit: int = 256,
+    ) -> list[RetrievedChunk]:
+        """Return course chunks in source order for broad overview requests."""
+
+        if not course_id.strip():
+            raise ValueError("course_id cannot be empty.")
+
+        if limit < 1:
+            raise ValueError("limit must be greater than zero.")
+
+        chunks = self._chunks_by_course.get(course_id, [])
+
+        return [
+            chunk.model_copy(update={"relevance_score": None})
+            for chunk in chunks[:limit]
+        ]
+
     def search(
         self,
         course_id: str,

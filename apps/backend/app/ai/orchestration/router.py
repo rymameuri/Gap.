@@ -82,6 +82,26 @@ _RULES = (
             "worked example",
             "show an example",
             "explain the lecture",
+            "full course",
+            "whole course",
+            "entire course",
+            "complete course",
+            "course overview",
+            "overview of the course",
+            "summarize the course",
+            "summarise the course",
+            "explain the course",
+            "teach me the course",
+            "walk me through the course",
+            "what does this course cover",
+            "what is this course about",
+            "everything in the course",
+            "everything in this course",
+            "everything about the course",
+            "all of the course",
+            "cover the whole course",
+            "cover the entire course",
+            "every topic in the course",
         ),
     ),
 )
@@ -94,6 +114,25 @@ _QUESTION_STARTERS = (
     "where ",
     "who ",
     "which ",
+)
+
+_STUDY_REQUEST_STARTERS = (
+    "can you ",
+    "could you ",
+    "please ",
+    "tell me ",
+    "show me ",
+    "give me ",
+    "describe ",
+    "define ",
+    "compare ",
+    "contrast ",
+    "outline ",
+    "review ",
+    "walk me through ",
+    "help me with ",
+    "i want to understand ",
+    "i need help with ",
 )
 
 _CLASS_WIDE_PHRASES = (
@@ -123,11 +162,15 @@ def route_request(request: AgentRequest) -> RouteDecision:
             matches.append((rule, matched_phrases))
 
     if not matches:
-        if text.endswith("?") or text.startswith(_QUESTION_STARTERS):
+        if (
+            text.endswith("?")
+            or text.startswith(_QUESTION_STARTERS)
+            or text.startswith(_STUDY_REQUEST_STARTERS)
+        ):
             return RouteDecision(
                 intent=Intent.ANSWER_QUESTION,
                 target_agent=AgentName.STUDY,
-                reason="The message has the form of a course question.",
+                reason="The message has the form of a course study request.",
             )
 
         return RouteDecision(

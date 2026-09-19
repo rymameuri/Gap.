@@ -1,3 +1,4 @@
+import { MaterialFileImport } from "../../components/MaterialFileImport";
 import { LearningCharts } from "../../components/LearningCharts";
 import {
   Users,
@@ -785,10 +786,12 @@ export function Materials() {
   const [name, setName] = useState(data.course.name),
     [syllabus, setSyllabus] = useState(data.course.syllabus),
     [newName, setNewName] = useState(""),
-    [email, setEmail] = useState("");
+    [email, setEmail] = useState(""),
+    [importing, setImporting] = useState(false);
   useEffect(() => {
     setName(data.course.name);
     setSyllabus(data.course.syllabus);
+    setImporting(false);
   }, [data.course.id]);
   return (
     <>
@@ -802,6 +805,7 @@ export function Materials() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            if (importing) return;
             void action.run(async () => {
               await put("/teacher/classes/" + data.course.id, {
                 name,
@@ -828,31 +832,24 @@ export function Materials() {
             id="syllabus"
             required
             minLength={10}
+            maxLength={50000}
+            disabled={importing || action.busy}
             style={{ minHeight: 190 }}
             value={syllabus}
             onChange={(e) => setSyllabus(e.target.value)}
           />
-          <label className="field" htmlFor="syllabus-file">
-            Import text syllabus (.txt)
-          </label>
-          <input
-            id="syllabus-file"
-            type="file"
-            accept=".txt,text/plain"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                if (file.size > 200000) return;
-                setSyllabus(await file.text());
-              }
-            }}
+          <MaterialFileImport
+            key={data.course.id}
+            courseId={data.course.id}
+            disabled={action.busy}
+            onText={setSyllabus}
+            onBusyChange={setImporting}
           />
           <p className="muted">
-            Material version {data.course.material_version}. Text imports
-            supported; PDF parsing is not connected.
+            Material version {data.course.material_version}.
           </p>
           <div className="actions">
-            <button className="btn primary" disabled={action.busy}>
+            <button className="btn primary" disabled={action.busy || importing}>
               Save materials
             </button>
           </div>

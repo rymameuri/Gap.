@@ -31,6 +31,10 @@ class FakeAIService implements AIServiceClient {
     });
   }
 
+  extractDocument() {
+    return Promise.resolve({ text: "Course material text.", sectionCount: 1 });
+  }
+
   modelJSON(): Promise<unknown> {
     return Promise.resolve({});
   }

@@ -124,3 +124,33 @@ def test_retriever_matches_simple_plural_variants() -> None:
 
     assert results
     assert results[0].source.document_id == "syllabus"
+
+
+def test_course_overview_returns_chunks_in_source_order() -> None:
+    retriever = InMemoryCourseRetriever()
+    chunks = (
+        create_chunks("unit-1", "Force motion acceleration")
+        + create_chunks("unit-2", "Energy work power")
+    )
+    retriever.replace_course("physics-101", chunks)
+
+    results = retriever.course_overview("physics-101", limit=10)
+
+    assert [item.source.document_id for item in results] == [
+        "unit-1",
+        "unit-2",
+    ]
+    assert all(item.relevance_score is None for item in results)
+
+
+def test_course_overview_respects_limit() -> None:
+    retriever = InMemoryCourseRetriever()
+    retriever.replace_course(
+        "physics-101",
+        create_chunks(
+            "course",
+            "one two three four five six seven eight nine ten",
+        ),
+    )
+
+    assert len(retriever.course_overview("physics-101", limit=1)) == 1
