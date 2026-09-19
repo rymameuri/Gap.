@@ -1,5 +1,5 @@
 import express, { type Express } from "express";
-import { DOCUMENT_UPLOAD_LIMIT } from "../constants.js";
+import { DOCUMENT_UPLOAD_LIMIT, ROSTER_UPLOAD_LIMIT } from "../constants.js";
 import { importCourseMaterial } from "../services/material-import.js";
 import { teacherOnly } from "../auth.js";
 import { NotFoundError } from "../errors.js";
@@ -23,6 +23,11 @@ import {
   queueExplainer,
   updateIntervention,
 } from "../services/learning.js";
+import {
+  inviteStudents,
+  previewRoster,
+  revokeInvitation,
+} from "../services/invitations.js";
 import { teacherWorkspace } from "../services/workspaces.js";
 import { resolveAgentReview } from "../services/agent-reviews.js";
 import { param, queryString, type RouteContext } from "./context.js";
@@ -82,6 +87,48 @@ export function registerTeacherRoutes(
     teacherOnly,
     asyncRoute((req, res) => {
       enrollByEmail(store, req.user.id, param(req, "id"), req.body);
+      res.json(ok);
+    }),
+  );
+
+  app.post(
+    "/api/teacher/classes/:id/roster/preview",
+    teacherOnly,
+    (req, _res, next) => {
+      requireOwnedClass(store, req.user.id, param(req, "id"));
+      next();
+    },
+    express.raw({
+      type: "application/octet-stream",
+      limit: ROSTER_UPLOAD_LIMIT,
+      inflate: false,
+    }),
+    asyncRoute((req, res) => {
+      res.json(
+        previewRoster(
+          store,
+          req.user.id,
+          param(req, "id"),
+          queryString(req, "filename"),
+          req.body,
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/teacher/classes/:id/invitations",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      res.json(inviteStudents(store, req.user.id, param(req, "id"), req.body));
+    }),
+  );
+
+  app.post(
+    "/api/teacher/invitations/:id/revoke",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      revokeInvitation(store, req.user.id, param(req, "id"));
       res.json(ok);
     }),
   );

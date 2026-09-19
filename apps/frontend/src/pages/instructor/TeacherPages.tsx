@@ -1,5 +1,6 @@
 import { MaterialFileImport } from "../../components/MaterialFileImport";
 import { CourseFiles } from "../../components/CourseFiles";
+import { RosterImport } from "../../components/RosterImport";
 import { LearningCharts } from "../../components/LearningCharts";
 import {
   Users,
@@ -862,7 +863,8 @@ export function ContentStudio() {
 }
 export function Materials() {
   const { data, refresh, selectClass } = useTeacher(),
-    action = useAction();
+    action = useAction(),
+    notice = useNotice();
   const [name, setName] = useState(data.course.name),
     [syllabus, setSyllabus] = useState(data.course.syllabus),
     [newName, setNewName] = useState(""),
@@ -967,6 +969,79 @@ export function Materials() {
             Enroll student
           </button>
         </form>
+        <RosterImport
+          key={data.course.id}
+          courseId={data.course.id}
+          onInvited={async (invited) => {
+            await refresh();
+            notice(
+              invited === 1
+                ? "1 invitation sent."
+                : invited + " invitations sent.",
+            );
+          }}
+        />
+        {data.invitations.length > 0 && (
+          <>
+            <h3>Invitations</h3>
+            <div className="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Status</th>
+                    <th>
+                      <span className="sr-only">Action</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.invitations.map((invitation) => (
+                    <tr key={invitation.id}>
+                      <td>
+                        {invitation.name && <strong>{invitation.name}</strong>}
+                        <div className="muted">{invitation.email}</div>
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            "badge " +
+                            (invitation.status === "pending" ? "sent" : "open")
+                          }
+                        >
+                          {invitation.status === "pending"
+                            ? "Pending"
+                            : "Declined"}
+                        </span>
+                      </td>
+                      <td>
+                        {invitation.status === "pending" && (
+                          <button
+                            className="btn small"
+                            disabled={action.busy}
+                            onClick={() =>
+                              void action.run(async () => {
+                                await post(
+                                  "/teacher/invitations/" +
+                                    invitation.id +
+                                    "/revoke",
+                                );
+                                await refresh();
+                              }, "Invitation revoked.")
+                            }
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <h3>Enrolled students</h3>
+          </>
+        )}
         <div className="tablewrap">
           <table>
             <thead>

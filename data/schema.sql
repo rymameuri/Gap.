@@ -18,6 +18,18 @@ CREATE TABLE agent_reviews(
       resolved_by TEXT REFERENCES users(id)
     );
 
+CREATE TABLE class_invitations(
+      id TEXT PRIMARY KEY,
+      class_id TEXT NOT NULL REFERENCES classes(id),
+      email TEXT NOT NULL,
+      name TEXT NOT NULL,
+      invited_by TEXT NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL CHECK(status IN ('pending','accepted','declined','revoked')),
+      created_at TEXT NOT NULL,
+      responded_at TEXT,
+      UNIQUE(class_id,email)
+    );
+
 CREATE TABLE classes(
   id TEXT PRIMARY KEY,
   teacher_id TEXT REFERENCES users(id),
@@ -183,6 +195,8 @@ CREATE TABLE users(
 );
 
 CREATE INDEX agent_reviews_class ON agent_reviews(class_id,status,created_at);
+
+CREATE INDEX class_invitations_email ON class_invitations(email,status);
 
 CREATE UNIQUE INDEX classes_join_code ON classes(join_code);
 

@@ -20,6 +20,18 @@ export const updateClassBody = z.object({
 
 export const enrollBody = z.object({ email: z.string().email() });
 
+export const inviteStudentsBody = z.object({
+  students: z
+    .array(
+      z.object({
+        email: z.string().trim().toLowerCase().email().max(200),
+        name: z.string().trim().max(150).default(""),
+      }),
+    )
+    .min(1)
+    .max(1000),
+});
+
 export const draftAssessmentBody = z.object({
   topic: z.string().min(3).max(200),
 });

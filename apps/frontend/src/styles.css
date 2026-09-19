@@ -1540,6 +1540,41 @@ button:disabled {
   color: #786b80;
   margin: 8px 0 0;
 }
+.class-invitations {
+  margin-bottom: 28px;
+}
+.class-invitations h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+}
+.class-invitations ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.class-invitations li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 14px 0;
+  border-top: 1px solid #e6e1ea;
+}
+.class-invitations li p {
+  margin: 4px 0 0;
+}
+.class-invitations .class-form-actions {
+  margin-top: 0;
+}
+.roster-import {
+  margin: 18px 0;
+}
+.roster-import section {
+  margin-top: 12px;
+}
 .class-code {
   display: flex;
   align-items: center;

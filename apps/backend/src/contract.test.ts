@@ -8,6 +8,7 @@ import {
   stringField,
 } from "../test/openapi.js";
 import { startTestServer, type TestServer } from "../test/support.js";
+import { rosterXlsx } from "../test/xlsx.js";
 import type { AIServiceClient } from "./agents/python-service.js";
 
 // The contract runs against the local engine. src/agents reads these directly
@@ -105,6 +106,7 @@ interface Intervention {
 interface StudentGap {
   id: string;
   topic: string;
+  status: string;
   probe: { options: string[] } | null;
 }
 
@@ -131,7 +133,7 @@ describe("API contract", () => {
     init: {
       cookie?: string;
       body?: unknown;
-      rawBody?: string;
+      rawBody?: string | Uint8Array;
       headers?: Record<string, string>;
     } = {},
   ): Promise<unknown> => {
@@ -484,6 +486,140 @@ describe("API contract", () => {
       } finally {
         await server.close();
       }
+    });
+  });
+
+  describe("roster invitations", () => {
+    const preview = "POST /api/teacher/classes/{id}/roster/preview";
+    const invite = "POST /api/teacher/classes/{id}/invitations";
+    const revoke = "POST /api/teacher/invitations/{id}/revoke";
+    const listInvitations = "GET /api/student/invitations";
+    const accept = "POST /api/student/invitations/{id}/accept";
+    const decline = "POST /api/student/invitations/{id}/decline";
+    const octet = { "Content-Type": "application/octet-stream" };
+    let rosterClass = "";
+
+    const pendingFor = async (cookie: string) =>
+      list<{ id: string; class_id: string }>(
+        await call(listInvitations, "/api/student/invitations", { cookie }),
+        "invitations",
+      ).filter((invitation) => invitation.class_id === rosterClass);
+
+    before(async () => {
+      rosterClass = stringField(
+        await call("POST /api/teacher/classes", "/api/teacher/classes", {
+          cookie: teacher,
+          body: { name: "Roster import" },
+        }),
+        "id",
+      );
+    });
+
+    test("previews Excel and CSV rosters and rejects unusable uploads", async () => {
+      const path = (filename: string, classId = rosterClass) =>
+        `/api/teacher/classes/${classId}/roster/preview?filename=${filename}`;
+      const workbook = rosterXlsx([
+        ["Name", "Email"],
+        ["Sara Ahmed", SARA],
+        ["No address", ""],
+      ]);
+      const body = await call(preview, path("roster.xlsx"), {
+        cookie: teacher,
+        rawBody: workbook,
+        headers: octet,
+      });
+      assert.deepEqual(
+        list<{ status: string }>(body, "rows").map((row) => row.status),
+        ["new", "invalid"],
+      );
+      await call(preview, path("roster.xls"), {
+        cookie: teacher,
+        rawBody: "Email",
+        headers: octet,
+      });
+      await call(preview, path("roster.csv", MISSING), {
+        cookie: teacher,
+        rawBody: "Email",
+        headers: octet,
+      });
+      await call(preview, path("roster.csv"), {
+        cookie: teacher,
+        rawBody: "x".repeat(2 * 1024 * 1024 + 1),
+        headers: octet,
+      });
+    });
+
+    test("invites, lists, accepts, declines and revokes", async () => {
+      const path = (classId: string) =>
+        `/api/teacher/classes/${classId}/invitations`;
+      assert.deepEqual(
+        await call(invite, path(rosterClass), {
+          cookie: teacher,
+          body: {
+            students: [
+              { email: SARA, name: "Sara Ahmed" },
+              { email: OMAR },
+              { email: "future.student@university.edu" },
+            ],
+          },
+        }),
+        { invited: 3, skipped: 0 },
+      );
+      await call(invite, path(rosterClass), {
+        cookie: teacher,
+        body: { students: [] },
+      });
+      await call(invite, path(MISSING), {
+        cookie: teacher,
+        body: { students: [{ email: SARA }] },
+      });
+
+      const [forSara] = await pendingFor(sara);
+      assert.ok(forSara);
+      await call(accept, `/api/student/invitations/${forSara.id}/accept`, {
+        cookie: omar,
+      });
+      await call(accept, `/api/student/invitations/${forSara.id}/accept`, {
+        cookie: sara,
+      });
+      await call(accept, `/api/student/invitations/${forSara.id}/accept`, {
+        cookie: sara,
+      });
+
+      const [forOmar] = await pendingFor(omar);
+      assert.ok(forOmar);
+      await call(decline, `/api/student/invitations/${forOmar.id}/decline`, {
+        cookie: sara,
+      });
+      await call(decline, `/api/student/invitations/${forOmar.id}/decline`, {
+        cookie: omar,
+      });
+      await call(decline, `/api/student/invitations/${forOmar.id}/decline`, {
+        cookie: omar,
+      });
+
+      const invitations = list<{ id: string; status: string }>(
+        await call(
+          "GET /api/teacher/workspace",
+          `/api/teacher/workspace?classId=${rosterClass}`,
+          { cookie: teacher },
+        ),
+        "invitations",
+      );
+      assert.deepEqual(
+        invitations.map((invitation) => invitation.status),
+        ["pending", "declined"],
+      );
+      const waiting = invitations[0]?.id ?? "";
+      await call(revoke, `/api/teacher/invitations/${waiting}/revoke`, {
+        cookie: teacher,
+      });
+      await call(revoke, `/api/teacher/invitations/${waiting}/revoke`, {
+        cookie: teacher,
+      });
+      await call(revoke, `/api/teacher/invitations/${MISSING}/revoke`, {
+        cookie: teacher,
+      });
     });
   });
 
@@ -866,28 +1002,33 @@ describe("API contract", () => {
       );
     });
 
-    test("recheck with an option, a non-option and someone else's gap", async () => {
-      const gaps = list<StudentGap>(
-        await call("GET /api/student/workspace", "/api/student/workspace", {
-          cookie: sara,
-        }),
-        "gaps",
-      );
-      const ready = gaps.find((gap) => gap.probe !== null);
+    test("recheck with a non-option and someone else's gap", async () => {
+      // Later quiz evidence can resolve a gap first, so use whichever
+      // student still has an open follow-up.
+      let owner = "";
+      let ready: StudentGap | undefined;
+      for (const cookie of [sara, omar]) {
+        ready = list<StudentGap>(
+          await call("GET /api/student/workspace", "/api/student/workspace", {
+            cookie,
+          }),
+          "gaps",
+        ).find((gap) => gap.probe !== null && gap.status !== "resolved");
+        owner = cookie;
+        if (ready) break;
+      }
       const option = ready?.probe?.options[0];
       assert.ok(ready && option !== undefined);
       app.store.run("UPDATE gaps SET status='ready' WHERE id=?", [ready.id]);
       const path = `/api/student/gaps/${ready.id}/recheck`;
       await call("POST /api/student/gaps/{id}/recheck", path, {
-        cookie: sara,
+        cookie: owner,
         body: { answer: "not an option" },
       });
+      // The accepted answer is exercised by the next test, which needs the
+      // student's single attempt.
       await call("POST /api/student/gaps/{id}/recheck", path, {
-        cookie: sara,
-        body: { answer: option },
-      });
-      await call("POST /api/student/gaps/{id}/recheck", path, {
-        cookie: omar,
+        cookie: owner === sara ? omar : sara,
         body: { answer: option },
       });
     });

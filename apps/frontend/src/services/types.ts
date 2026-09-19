@@ -107,6 +107,34 @@ export type AgentEvent = {
   created_at: string;
   job_id?: string;
 };
+export type TeacherInvitation = {
+  id: string;
+  email: string;
+  name: string;
+  status: "pending" | "declined";
+  created_at: string;
+  responded_at: string | null;
+};
+export type StudentInvitation = {
+  id: string;
+  class_id: string;
+  class_name: string;
+  teacher_name: string;
+  created_at: string;
+};
+export type RosterRowStatus =
+  "new" | "invited" | "enrolled" | "duplicate" | "invalid";
+export type RosterPreview = {
+  rows: {
+    row: number;
+    name: string;
+    email: string;
+    status: RosterRowStatus;
+    hasAccount: boolean;
+    message?: string;
+  }[];
+  summary: Record<RosterRowStatus, number>;
+};
 export type TeacherData = {
   classes: Course[];
   course: Course;
@@ -119,6 +147,7 @@ export type TeacherData = {
     open_gaps: number;
     activity: number;
   }[];
+  invitations: TeacherInvitation[];
   quizzes: Quiz[];
   reviews: Review[];
   agentReviews: AgentReview[];
