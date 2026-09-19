@@ -1,6 +1,6 @@
-# Manara
+# GAP.
 
-Manara is a course-specific learning platform for university teachers and students. It finds the misconceptions behind students' wrong answers, groups them across a class, and helps the teacher close them with targeted explanations and follow-up checks. AI drafts quizzes, grades and explanations; the teacher approves anything a student sees.
+GAP. is a course-specific learning platform for university teachers and students. It finds the misconceptions behind students' wrong answers, groups them across a class, and helps the teacher close them with targeted explanations and follow-up checks. AI drafts quizzes, grades and explanations; the teacher approves anything a student sees.
 
 ## How it works
 
