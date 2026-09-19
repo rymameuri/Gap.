@@ -105,6 +105,7 @@ interface Intervention {
 interface StudentGap {
   id: string;
   topic: string;
+  status: string;
   probe: { options: string[] } | null;
 }
 
@@ -866,28 +867,33 @@ describe("API contract", () => {
       );
     });
 
-    test("recheck with an option, a non-option and someone else's gap", async () => {
-      const gaps = list<StudentGap>(
-        await call("GET /api/student/workspace", "/api/student/workspace", {
-          cookie: sara,
-        }),
-        "gaps",
-      );
-      const ready = gaps.find((gap) => gap.probe !== null);
+    test("recheck with a non-option and someone else's gap", async () => {
+      // Later quiz evidence can resolve a gap first, so use whichever
+      // student still has an open follow-up.
+      let owner = "";
+      let ready: StudentGap | undefined;
+      for (const cookie of [sara, omar]) {
+        ready = list<StudentGap>(
+          await call("GET /api/student/workspace", "/api/student/workspace", {
+            cookie,
+          }),
+          "gaps",
+        ).find((gap) => gap.probe !== null && gap.status !== "resolved");
+        owner = cookie;
+        if (ready) break;
+      }
       const option = ready?.probe?.options[0];
       assert.ok(ready && option !== undefined);
       app.store.run("UPDATE gaps SET status='ready' WHERE id=?", [ready.id]);
       const path = `/api/student/gaps/${ready.id}/recheck`;
       await call("POST /api/student/gaps/{id}/recheck", path, {
-        cookie: sara,
+        cookie: owner,
         body: { answer: "not an option" },
       });
+      // The accepted answer is exercised by the next test, which needs the
+      // student's single attempt.
       await call("POST /api/student/gaps/{id}/recheck", path, {
-        cookie: sara,
-        body: { answer: option },
-      });
-      await call("POST /api/student/gaps/{id}/recheck", path, {
-        cookie: omar,
+        cookie: owner === sara ? omar : sara,
         body: { answer: option },
       });
     });
