@@ -177,7 +177,7 @@ describe("student Study Assistant", () => {
   test("saved conversations survive a backend restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "study-conversations-"));
     const databasePath = join(directory, "app.sqlite");
-    let conversationId = "";
+    let conversationId: string;
     try {
       const first = await startTestServer(
         { DATABASE_PATH: databasePath },

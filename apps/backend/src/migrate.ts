@@ -2,8 +2,11 @@ import type { Store } from "./db.js";
 import { backfillJoinCodes } from "./join-codes.js";
 import {
   MIGRATIONS,
+  backfillMissingJoinCodes,
   baseline,
   classJoinCode,
+  gapResolutions,
+  learningRecords,
   type Migration,
 } from "./migrations/index.js";
 import { JOIN_CODE_INDEX } from "./migrations/0002-class-join-code.js";
@@ -95,6 +98,43 @@ function adoptLegacySchema(store: Store): string[] {
   return adopted;
 }
 
+// A local watcher briefly applied the file/conversation tables as 0004 before
+// gap provenance was split into its own migration. Preserve that database and
+// adopt its tables under the released 0005 id, filling the missing columns.
+function reconcileEarlyLearningRecords(store: Store): {
+  adopted: string[];
+  applied: string[];
+} {
+  const early = [
+    baseline.id,
+    classJoinCode.id,
+    backfillMissingJoinCodes.id,
+    "0004-learning-records",
+  ];
+  if (appliedMigrations(store).join("\n") !== early.join("\n"))
+    return { adopted: [], applied: [] };
+  for (const table of [
+    "course_files",
+    "conversations",
+    "conversation_messages",
+    "agent_reviews",
+  ])
+    if (!tableExists(store, table))
+      throw new MigrationError(
+        `Early learning-records migration is missing ${table}; restore a matching database.`,
+      );
+  if (!tableExists(store, "gap_resolutions")) gapResolutions.up(store);
+  if (!columnExists(store, "agent_reviews", "message_id"))
+    store.run(
+      "ALTER TABLE agent_reviews ADD COLUMN message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL",
+    );
+  store.run(`UPDATE ${LEDGER} SET id=? WHERE id='0004-learning-records'`, [
+    learningRecords.id,
+  ]);
+  record(store, gapResolutions.id);
+  return { adopted: [learningRecords.id], applied: [gapResolutions.id] };
+}
+
 export interface MigrationResult {
   /** Migrations recorded for a database created before migrations existed. */
   readonly adopted: readonly string[];
@@ -111,11 +151,13 @@ export function migrate(
   migrations: readonly Migration[] = MIGRATIONS,
 ): MigrationResult {
   assertOrdered(migrations);
-  const adopted = store.transaction(() => {
+  const recovered = store.transaction(() => {
     store.run(
       `CREATE TABLE IF NOT EXISTS ${LEDGER}(id TEXT PRIMARY KEY,applied_at TEXT NOT NULL)`,
     );
-    return adoptLegacySchema(store);
+    const adopted = adoptLegacySchema(store);
+    const early = reconcileEarlyLearningRecords(store);
+    return { adopted: [...adopted, ...early.adopted], applied: early.applied };
   });
   const done = appliedMigrations(store);
   assertKnownPrefix(done, migrations);
@@ -125,7 +167,13 @@ export function migrate(
       migration.up(store);
       record(store, migration.id);
     });
-  return { adopted, applied: pending.map((migration) => migration.id) };
+  return {
+    adopted: recovered.adopted,
+    applied: [
+      ...recovered.applied,
+      ...pending.map((migration) => migration.id),
+    ],
+  };
 }
 
 /**
