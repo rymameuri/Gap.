@@ -46,7 +46,7 @@ try {
   logger.fatal({ err: error }, "database migration refused");
   process.exit(1);
 }
-seed(store, config.demoPassword);
+seed(store, config.demoPassword, { showcase: true });
 const app = createApp({
   store,
   config,

@@ -1231,6 +1231,36 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /api/student/classes/{id}/companion:
+    post:
+      operationId: askStudentCompanion
+      tags: [student]
+      description: Ask the student companion. Handles course questions using this class's own material and everyday wellbeing support. A message that shows distress is flagged for the teacher, and an urgent one always gets a safety message.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 2000 }
+                conversationId: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The companion's reply, saved to the conversation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudyAssistantResponse" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /api/student/quizzes/{id}/submit:
     parameters:
       - $ref: "#/components/parameters/Id"

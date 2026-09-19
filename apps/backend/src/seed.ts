@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { hashPassword, type Store } from "./db.js";
 import { classCode } from "./join-codes.js";
 import type { Question } from "./agents/schemas.js";
+import { seedDemoExtras } from "./seed-demo.js";
 export const initialTopics = [
   {
     title: "Force and motion",
@@ -126,8 +127,15 @@ function seedTopics(): [SeedTopic, SeedTopic, SeedTopic] {
   return [force, energy, circuits];
 }
 
-/** Seeds the demo course and accounts into an empty database. No-op when any user exists. */
-export function seed(store: Store, demoPassword: string): void {
+/**
+ * Seeds the demo course and accounts into an empty database. No-op when any user exists.
+ * `showcase` also fills the demo accounts with material, decks, quizzes, flags and chats.
+ */
+export function seed(
+  store: Store,
+  demoPassword: string,
+  options: { showcase?: boolean } = {},
+): void {
   if (store.one("SELECT id FROM users LIMIT 1")) return;
   const now = new Date().toISOString(),
     password = hashPassword(demoPassword);
@@ -301,5 +309,6 @@ export function seed(store: Store, demoPassword: string): void {
       { interventionId: WELCOME_EXPLAINER },
       "sara",
     );
+    if (options.showcase) seedDemoExtras(store, DEMO_STUDENTS);
   });
 }

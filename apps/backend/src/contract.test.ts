@@ -803,6 +803,101 @@ describe("API contract", () => {
     });
   });
 
+  describe("student companion", () => {
+    const operation = "POST /api/student/classes/{id}/companion";
+    const reply = (answer: string) => ({
+      extractDocument: () => Promise.reject(new Error("unused")),
+      study: () => Promise.reject(new Error("unused")),
+      modelJSON: () =>
+        Promise.resolve({
+          answer,
+          usedExcerpts: ["S1"],
+          usedGuidance: ["st-retrieval"],
+        }),
+    });
+
+    test("answers, saves the chat, and validates requests", async () => {
+      const server = await startTestServer(
+        {},
+        reply("Try retrieval practice."),
+      );
+      try {
+        const cookie = await server.login(SARA);
+        const ask = async (id: string, body: unknown) =>
+          contract.check(
+            operation,
+            await server.request(`/api/student/classes/${id}/companion`, {
+              method: "POST",
+              cookie,
+              body,
+            }),
+          ) as { content: string; conversationId: string; sources: unknown[] };
+        const first = await ask(SEED_CLASS, {
+          message: "How should I revise for my force and motion exam?",
+        });
+        assert.match(first.content, /retrieval/);
+        const again = await ask(SEED_CLASS, {
+          message: "And how often?",
+          conversationId: first.conversationId,
+        });
+        assert.equal(again.conversationId, first.conversationId);
+        await ask(SEED_CLASS, { message: "" });
+        await ask(MISSING, { message: "Hello" });
+      } finally {
+        await server.close();
+      }
+    });
+
+    test("flags a worrying message and never leaves the student without a safe reply", async () => {
+      const failing = {
+        ...reply(""),
+        modelJSON: () => Promise.reject(new Error("model down")),
+      };
+      const server = await startTestServer({}, failing);
+      try {
+        const cookie = await server.login(SARA);
+        const send = (message: string) =>
+          server.request(`/api/student/classes/${SEED_CLASS}/companion`, {
+            method: "POST",
+            cookie,
+            body: { message },
+          });
+        const urgent = contract.check(
+          operation,
+          await send("I want to kill myself"),
+        ) as { content: string };
+        assert.match(urgent.content, /emergency/i);
+        assert.match(urgent.content, /findahelpline/);
+        const flags = server.store.all<{ severity: string; source: string }>(
+          "SELECT severity,source FROM wellbeing_flags WHERE class_id=?",
+          [SEED_CLASS],
+        );
+        assert.deepEqual(flags, [{ severity: "urgent", source: "assistant" }]);
+        // An ordinary question with the model down is an honest 503, not a fake answer.
+        contract.check(operation, await send("Explain net force"));
+      } finally {
+        await server.close();
+      }
+    });
+
+    test("documents an unavailable AI service", async () => {
+      const server = await startTestServer({}, null);
+      try {
+        const cookie = await server.login(SARA);
+        contract.check(
+          operation,
+          await server.request(`/api/student/classes/${SEED_CLASS}/companion`, {
+            method: "POST",
+            cookie,
+            body: { message: "Hello" },
+          }),
+        );
+      } finally {
+        await server.close();
+      }
+    });
+  });
+
   describe("saved conversations and AI review", () => {
     test("lists, reads, and deletes student-owned conversations", async () => {
       const asked = await call(

@@ -22,7 +22,7 @@ import { PresentationEditor } from "./pages/instructor/PresentationEditor";
 import { AssessmentsHub, Settings, StudentsHub } from "./pages/instructor/Hubs";
 import { AgentActivity } from "./pages/instructor/TeacherPages";
 import { CourseOverview } from "./pages/student/CourseOverview";
-import { StudyAssistant } from "./pages/student/StudyAssistant";
+import { StudentCompanion } from "./pages/student/StudentCompanion";
 import { Practice } from "./pages/student/Practice";
 import { QuizPage } from "./pages/student/QuizPage";
 import { Lesson } from "./pages/student/Lesson";
@@ -166,7 +166,7 @@ createRoot(document.getElementById("root")!).render(
           >
             <Route path="courses/:courseId" element={<CourseLayout />}>
               <Route index element={<CourseOverview />} />
-              <Route path="assistant" element={<StudyAssistant />} />
+              <Route path="assistant" element={<StudentCompanion />} />
               <Route path="practice" element={<Practice />} />
               <Route path="quizzes/:quizId" element={<QuizPage />} />
               <Route path="lessons/:gapId" element={<Lesson />} />

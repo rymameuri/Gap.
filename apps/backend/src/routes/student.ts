@@ -16,6 +16,7 @@ import {
   askStudyAssistant,
   streamStudyAssistant,
 } from "../services/study-assistant.js";
+import { askStudentCompanion } from "../services/student-companion.js";
 import {
   deleteConversation,
   getConversation,
@@ -143,6 +144,22 @@ export function registerStudentRoutes(
         });
         res.end();
       }
+    }),
+  );
+
+  app.post(
+    "/api/student/classes/:id/companion",
+    studentOnly,
+    asyncRoute(async (req, res) => {
+      res.json(
+        await askStudentCompanion(
+          store,
+          aiService,
+          req.user.id,
+          param(req, "id"),
+          req.body,
+        ),
+      );
     }),
   );
 

@@ -30,7 +30,7 @@ export interface CompanionChat {
   updated_at: string;
 }
 
-const INSTRUCTIONS = `You are Rafiq, a teaching companion for a school teacher.
+const INSTRUCTIONS = `You are a teaching companion for a school teacher.
 You receive JSON with: message, history, classContext (live data about this teacher's class), and pedagogyNotes (curated teaching guidance).
 Rules:
 - Ground advice in pedagogyNotes and classContext. Do not invent student data, names, or numbers that are not in classContext.

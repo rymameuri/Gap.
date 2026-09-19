@@ -114,19 +114,27 @@ const words = (s: string) =>
     .filter((w) => w.length > 2);
 
 /** Keyword-scored retrieval; returns the best matches, or none when nothing fits. */
-export function searchPedagogy(query: string, limit = 3): PedagogyDoc[] {
+export function rankDocs<T extends PedagogyDoc>(
+  docs: readonly T[],
+  query: string,
+  limit: number,
+): T[] {
   const q = new Set(words(query));
-  return PEDAGOGY_KB.map((doc) => {
-    const hay = new Set(
-      words(doc.title + " " + doc.tags.join(" ") + " " + doc.body),
-    );
-    let score = 0;
-    for (const w of q) if (hay.has(w)) score += 1;
-    for (const t of doc.tags) if (query.toLowerCase().includes(t)) score += 3;
-    return { doc, score };
-  })
+  return docs
+    .map((doc) => {
+      const hay = new Set(
+        words(doc.title + " " + doc.tags.join(" ") + " " + doc.body),
+      );
+      let score = 0;
+      for (const w of q) if (hay.has(w)) score += 1;
+      for (const t of doc.tags) if (query.toLowerCase().includes(t)) score += 3;
+      return { doc, score };
+    })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((x) => x.doc);
 }
+
+export const searchPedagogy = (query: string, limit = 3): PedagogyDoc[] =>
+  rankDocs(PEDAGOGY_KB, query, limit);

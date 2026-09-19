@@ -104,7 +104,7 @@ export function StudentLayout() {
 
 const links = [
   ["", "Overview", LayoutDashboard],
-  ["assistant", "Study Assistant", MessageSquare],
+  ["assistant", "Companion", MessageSquare],
   ["practice", "Practice & Quizzes", ClipboardCheck],
   ["materials", "Materials", BookOpen],
   ["progress", "My Progress", ChartNoAxesCombined],
