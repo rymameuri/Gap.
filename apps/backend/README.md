@@ -68,6 +68,24 @@ The commands use `DATABASE_PATH`. Rolling back `0001-baseline` drops every table
 
 To change the schema, add the next numbered file in `src/migrations`, append it to `MIGRATIONS`, and run `npm run db -- schema`. Never edit or rename a released migration. `src/migrate.test.ts` checks that every migration reverses exactly.
 
+## Gap priority explanations
+
+Each open gap cluster in `GET /api/teacher/workspace` carries a `priorityExplanation`. The dashboard ranks clusters by `priority`, the sum of the severities of their open gaps, which equals the number of affected students times their mean severity. The explanation splits a cluster's priority into those two factors with exact Shapley values (SHAP), using the class's open clusters as the background:
+
+```json
+{
+  "method": "exact-shapley",
+  "baseline": 17.5,
+  "prediction": 36,
+  "attributions": [
+    { "feature": "students", "value": 12, "contribution": 13.25 },
+    { "feature": "severity", "value": 3, "contribution": 5.25 }
+  ]
+}
+```
+
+`baseline` is the mean priority of the open clusters, and `baseline` plus the contributions equals `priority`. A positive contribution means the factor raises the cluster above the class average. `src/explain/shapley.ts` enumerates every coalition, so the values are exact and deterministic, not sampled. Tests check them against the permutation definition of Shapley values, and they were checked against `shap.explainers.Exact` from the Python `shap` package, which gives identical values within floating-point rounding.
+
 ## Errors
 
 Every API error response has the same body:

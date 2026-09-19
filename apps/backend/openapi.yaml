@@ -859,7 +859,17 @@ components:
 
     Cluster:
       type: object
-      required: [topic, tag, section, gapId, students, priority, struggling]
+      required:
+        [
+          topic,
+          tag,
+          section,
+          gapId,
+          students,
+          priority,
+          struggling,
+          priorityExplanation,
+        ]
       properties:
         topic: { type: string }
         tag: { type: string }
@@ -868,6 +878,34 @@ components:
         students: { type: integer, minimum: 1 }
         priority: { type: integer, minimum: 0 }
         struggling: { type: integer, minimum: 0 }
+        priorityExplanation:
+          { $ref: "#/components/schemas/PriorityExplanation" }
+
+    PriorityExplanation:
+      description: |
+        Why a cluster ranks where it does. priority = students x mean severity.
+        baseline is the mean priority of the class's open clusters, and each
+        contribution is the feature's exact Shapley value against them, so
+        baseline plus the contributions equals the cluster's priority.
+      type: object
+      additionalProperties: false
+      required: [method, baseline, prediction, attributions]
+      properties:
+        method: { const: exact-shapley }
+        baseline: { type: number }
+        prediction: { type: number }
+        attributions:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: object
+            additionalProperties: false
+            required: [feature, value, contribution]
+            properties:
+              feature: { enum: [students, severity] }
+              value: { type: number }
+              contribution: { type: number }
 
     RosterEntry:
       type: object
