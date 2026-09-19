@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -124,3 +125,75 @@ def test_completion_returns_normalised_response() -> None:
     assert result.text == "The answer is 42."
     assert result.prompt_tokens == 10
     assert result.completion_tokens == 6
+
+def test_streaming_completion_yields_text_deltas_and_closes() -> None:
+    class FakeStream:
+        def __init__(self) -> None:
+            self.closed = False
+            self.items = iter(
+                [
+                    SimpleNamespace(
+                        choices=[
+                            SimpleNamespace(
+                                delta=SimpleNamespace(content="Momentum ")
+                            )
+                        ]
+                    ),
+                    SimpleNamespace(
+                        choices=[
+                            SimpleNamespace(
+                                delta=SimpleNamespace(
+                                    content="equals mass times velocity."
+                                )
+                            )
+                        ]
+                    ),
+                ]
+            )
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return next(self.items)
+
+        def close(self) -> None:
+            self.closed = True
+
+    stream = FakeStream()
+    calls: list[dict[str, object]] = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return stream
+
+    fake_sdk_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create)
+        )
+    )
+    client = QuantumBlackLLMClient(
+        config=QuantumBlackConfig(
+            endpoint="https://gateway.example/",
+            api_version="test-version",
+            model="test-model",
+            api_key="test-key",
+        ),
+        sdk_client=fake_sdk_client,
+    )
+
+    async def collect() -> list[str]:
+        return [
+            delta
+            async for delta in client.astream(
+                [{"role": "user", "content": "Test"}],
+                max_completion_tokens=50,
+            )
+        ]
+
+    deltas = asyncio.run(collect())
+
+    assert deltas == ["Momentum ", "equals mass times velocity."]
+    assert calls[0]["stream"] is True
+    assert stream.closed is True
+

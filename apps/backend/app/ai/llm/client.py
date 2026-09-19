@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,6 +39,13 @@ def _read_env_file(path: Path) -> dict[str, str]:
         values[key.strip()] = value.strip().strip("\"'")
 
     return values
+
+
+def _next_or_end(iterator: Any, sentinel: object) -> Any:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return sentinel
 
 
 @dataclass(frozen=True)
@@ -212,3 +219,63 @@ class QuantumBlackLLMClient:
             messages=messages,
             max_completion_tokens=max_completion_tokens,
         )
+
+    async def astream(
+        self,
+        messages: Sequence[Mapping[str, str]],
+        max_completion_tokens: int = 1000,
+    ) -> AsyncIterator[str]:
+        """Yield text deltas from the gateway without blocking the event loop."""
+
+        if not messages:
+            raise ValueError("At least one message is required.")
+
+        if max_completion_tokens < 1:
+            raise ValueError(
+                "max_completion_tokens must be greater than zero."
+            )
+
+        try:
+            response = await asyncio.to_thread(
+                self._client.chat.completions.create,
+                model=self.config.model,
+                messages=list(messages),
+                max_completion_tokens=max_completion_tokens,
+                stream=True,
+            )
+        except OpenAIError as exc:
+            raise LLMGatewayError(
+                "The QuantumBlack gateway request failed."
+            ) from exc
+
+        iterator = iter(response)
+        sentinel = object()
+
+        try:
+            while True:
+                try:
+                    chunk = await asyncio.to_thread(
+                        _next_or_end, iterator, sentinel
+                    )
+                except OpenAIError as exc:
+                    raise LLMGatewayError(
+                        "The QuantumBlack gateway stream failed."
+                    ) from exc
+
+                if chunk is sentinel:
+                    break
+
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    continue
+
+                delta = getattr(choices[0], "delta", None)
+                content = getattr(delta, "content", None) if delta else None
+
+                if isinstance(content, str) and content:
+                    yield content
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                await asyncio.to_thread(close)
+

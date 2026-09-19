@@ -35,7 +35,9 @@ Rules:
 9. For a course-wide explanation, organize the material in a logical source
    order, cover every major topic represented in the supplied sources, explain
    the connections between topics, and finish with a concise study checklist.
-10. Keep citations attached to the claims or sections they support.
+10. Keep citations attached to the claims or sections they support. For longer
+    responses, include at least one supporting citation in each explanatory
+    paragraph or list group so verified sections can be shown progressively.
 11. Speak directly to the learner using clear university-level language.
 12. Return only the final learner-facing Markdown answer. Do not wrap the answer
     in JSON and do not put the whole answer inside a Markdown code fence.

@@ -167,6 +167,77 @@ describe("PythonAIServiceClient", () => {
     assert.equal(result.grounded, true);
   });
 
+  test("forwards progressive study stream events and returns the final response", async () => {
+    const url = await listen(async (request, response) => {
+      assert.equal(request.url, "/v1/study/stream");
+      assert.equal(request.headers["x-manara-ai-token"], "private-token");
+      await readBody(request);
+      response.writeHead(200, { "Content-Type": "application/x-ndjson" });
+      response.write(
+        JSON.stringify({
+          type: "status",
+          message: "Reading course material...",
+        }) + "\n",
+      );
+      response.write(
+        JSON.stringify({ type: "delta", text: "Momentum equals " }) + "\n",
+      );
+      response.write(
+        JSON.stringify({
+          type: "delta",
+          text: "mass times velocity [S1].",
+        }) + "\n",
+      );
+      response.end(
+        JSON.stringify({
+          type: "complete",
+          response: {
+            content: "Momentum equals mass times velocity [S1].",
+            sources: [
+              {
+                document_id: "syllabus",
+                title: "Physics syllabus",
+                page: null,
+                slide: null,
+                chunk_id: "chunk-1",
+              },
+            ],
+            grounded: true,
+            requires_human_review: false,
+          },
+        }) + "\n",
+      );
+    });
+    const client = new PythonAIServiceClient({
+      url,
+      token: "private-token",
+    });
+    const updates: unknown[] = [];
+
+    const result = await client.studyStream(
+      {
+        userId: "sara",
+        courseId: "physics",
+        message: "Explain momentum",
+        courseTitle: "Physics",
+        syllabus: "Momentum is mass times velocity.",
+        materialVersion: 2,
+        history: [],
+      },
+      (update) => {
+        updates.push(update);
+      },
+    );
+
+    assert.deepEqual(updates, [
+      { type: "status", message: "Reading course material..." },
+      { type: "delta", text: "Momentum equals " },
+      { type: "delta", text: "mass times velocity [S1]." },
+    ]);
+    assert.equal(result.content, "Momentum equals mass times velocity [S1].");
+    assert.equal(result.sources[0]?.documentId, "syllabus");
+  });
+
   test("returns model JSON and rejects sidecar failures", async () => {
     const successUrl = await listen(async (_request, response) => {
       response.writeHead(200, { "Content-Type": "application/json" });

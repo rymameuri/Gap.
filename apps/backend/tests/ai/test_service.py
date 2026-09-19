@@ -48,6 +48,29 @@ class FakeLLMClient:
         )
 
 
+class FakeStreamingLLMClient(FakeLLMClient):
+    async def astream(
+        self,
+        messages,
+        *,
+        max_completion_tokens: int,
+    ):
+        message_list = list(messages)
+        self.calls.append(
+            {
+                "messages": message_list,
+                "max_completion_tokens": max_completion_tokens,
+                "stream": True,
+            }
+        )
+        for delta in (
+            "## Momentum\n\n",
+            "Momentum is mass multiplied by velocity [S1].",
+        ):
+            await asyncio.sleep(0)
+            yield delta
+
+
 def write_docx(path: Path, text: str) -> None:
     document = WordDocument()
     document.add_heading("Course material", level=1)
@@ -368,3 +391,33 @@ def test_full_course_request_uses_all_indexed_course_chunks() -> None:
         "conservation",
     ):
         assert term in prompt
+
+def test_stream_study_preserves_review_gate_and_progressive_content() -> None:
+    llm_client = FakeStreamingLLMClient()
+    service = AIService(llm_client=llm_client)
+    service.replace_course_text(
+        course_id="physics-101",
+        document_id="syllabus",
+        title="Physics syllabus",
+        text="Momentum is the product of mass and velocity.",
+    )
+    streamed: list[str] = []
+
+    async def run():
+        return await service.stream_study(
+            make_request("physics-101"),
+            lambda text: _append(streamed, text),
+        )
+
+    result = asyncio.run(run())
+
+    assert result.requires_human_review is False
+    assert result.metadata["review_approved"] is True
+    assert "".join(streamed) == result.content
+    assert result.content.endswith("[S1].")
+    assert llm_client.calls[-1]["stream"] is True
+
+
+async def _append(values: list[str], text: str) -> None:
+    values.append(text)
+

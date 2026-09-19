@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 
 from app.ai.agents.assessment_agent import AssessmentAgent
 from app.ai.agents.diagnostic_agent import DiagnosticAgent
@@ -299,6 +299,52 @@ class AIService:
 
         return response.model_copy(
             update={"result": reviewed_result}
+        )
+
+    async def stream_study(
+        self,
+        request: AgentRequest,
+        on_delta: Callable[[str], Awaitable[None]],
+    ) -> AgentResult:
+        """Stream verified Study Agent blocks while preserving the review gate."""
+
+        route = await self._workflow.route(request)
+
+        # Non-study requests keep the existing workflow semantics. They simply
+        # return as one final event rather than being forced through StudyAgent.
+        if (
+            route.denied
+            or route.requires_clarification
+            or route.target_agent != AgentName.STUDY
+        ):
+            return (await self.run(request)).result
+
+        try:
+            result = await self._study_agent.run_streaming(
+                request,
+                on_delta,
+            )
+        except Exception:
+            result = AgentResult(
+                agent=AgentName.STUDY,
+                content=(
+                    "I couldn’t complete that request safely. "
+                    "It has been marked for review."
+                ),
+                sources=[],
+                requires_human_review=True,
+                metadata={
+                    "grounded": False,
+                    "workflow_status": "stream_execution_failed",
+                },
+            )
+
+        review = self._reviewer.review_agent_result(result)
+
+        return self._apply_review_gate(
+            request=request,
+            result=result,
+            review=review,
         )
 
     async def generate_quiz(

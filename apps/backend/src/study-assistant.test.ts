@@ -8,17 +8,14 @@ import {
   type AIServiceClient,
   type StudyRequest,
 } from "./agents/python-service.js";
-import { startTestServer } from "../test/support.js";
+import { ALLOWED_ORIGIN, startTestServer } from "../test/support.js";
 
 class FakeAIService implements AIServiceClient {
   readonly requests: StudyRequest[] = [];
   fail = false;
 
-  study(request: StudyRequest) {
-    this.requests.push(request);
-    if (this.fail)
-      return Promise.reject(new AIServiceRequestError("sidecar unavailable"));
-    return Promise.resolve({
+  response() {
+    return {
       content: "Momentum equals mass times velocity [S1].",
       sources: [
         {
@@ -31,7 +28,29 @@ class FakeAIService implements AIServiceClient {
       ],
       grounded: true,
       requiresHumanReview: false,
-    });
+    };
+  }
+
+  study(request: StudyRequest) {
+    this.requests.push(request);
+    if (this.fail)
+      return Promise.reject(new AIServiceRequestError("sidecar unavailable"));
+    return Promise.resolve(this.response());
+  }
+
+  async studyStream(
+    request: StudyRequest,
+    onUpdate: (
+      update:
+        { type: "status"; message: string } | { type: "delta"; text: string },
+    ) => void | Promise<void>,
+  ) {
+    this.requests.push(request);
+    if (this.fail) throw new AIServiceRequestError("sidecar unavailable");
+    await onUpdate({ type: "status", message: "Reading course material..." });
+    await onUpdate({ type: "delta", text: "Momentum equals " });
+    await onUpdate({ type: "delta", text: "mass times velocity [S1]." });
+    return this.response();
   }
 
   extractDocument() {
@@ -177,7 +196,7 @@ describe("student Study Assistant", () => {
   test("saved conversations survive a backend restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "study-conversations-"));
     const databasePath = join(directory, "app.sqlite");
-    let conversationId = "";
+    let conversationId: string;
     try {
       const first = await startTestServer(
         { DATABASE_PATH: databasePath },
@@ -362,6 +381,51 @@ describe("student Study Assistant", () => {
         (workspace.body as { agentReviews: unknown[] }).agentReviews,
         [],
       );
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("streams progressive updates and finishes with the same safe response", async () => {
+    const ai = new FakeAIService();
+    const server = await startTestServer({}, ai);
+    try {
+      const cookie = await server.login("student@gap.demo");
+      const response = await fetch(
+        server.baseUrl + "/api/student/classes/physics/assistant",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/x-ndjson",
+            Origin: ALLOWED_ORIGIN,
+            Cookie: cookie,
+          },
+          body: JSON.stringify({ message: "Explain momentum" }),
+        },
+      );
+
+      assert.equal(response.status, 200);
+      assert.match(
+        response.headers.get("content-type") ?? "",
+        /application\/x-ndjson/,
+      );
+      const events = (await response.text())
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+      assert.deepEqual(
+        events.map((event) => event.type),
+        ["status", "delta", "delta", "complete"],
+      );
+      assert.equal(events[1]?.text, "Momentum equals ");
+      const completed = events[3]?.response as Record<string, unknown>;
+      assert.equal(completed.content, ai.response().content);
+      assert.equal(completed.grounded, true);
+      assert.equal(completed.requiresHumanReview, false);
+      assert.equal(typeof completed.conversationId, "string");
+      assert.equal(ai.requests.length, 1);
     } finally {
       await server.close();
     }
