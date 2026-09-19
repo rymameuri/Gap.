@@ -54,9 +54,15 @@ function Guard({
     return (
       <div className="auth-page">
         <h1>This is a {role} workspace.</h1>
-        <p>You are signed in as a {user.role}.</p>
+        <p>
+          You are signed in as a {user.role}. Browser tabs share one sign-in, so
+          switching accounts in another tab changes this one too.
+        </p>
         <Link className="btn primary" to={"/" + user.role + "/"}>
-          Open my workspace
+          Open {user.role} workspace
+        </Link>
+        <Link className="btn" to={"/login/" + role}>
+          Sign in as {role}
         </Link>
       </div>
     );
