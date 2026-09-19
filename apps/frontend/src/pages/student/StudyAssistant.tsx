@@ -11,12 +11,17 @@ import {
   ChevronRight,
   PanelRightOpen,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useCourse } from "../../layouts/StudentLayout";
 import { ErrorBox, useNotice } from "../../components/ui";
-import { post } from "../../services/api";
-import type { StudyAssistantResponse } from "../../services/types";
+import { api, post } from "../../services/api";
+import type {
+  ConversationDetail,
+  ConversationSummary,
+  StudyAssistantResponse,
+} from "../../services/types";
 import { courseTopics, errorMessage } from "./course-model";
 import { useStudyDrafts, type StudyDraft } from "./useStudyDrafts";
 import { MaterialReader } from "./components/MaterialReader";
@@ -84,6 +89,7 @@ export function StudyAssistant() {
   const { course, gaps, quizzes } = useCourse();
   const [params, setParams] = useSearchParams();
   const draftId = params.get("draft");
+  const conversationId = params.get("conversation");
   const { drafts, saveDraft, storageError } = useStudyDrafts(course.id);
   const current = drafts.find((draft) => draft.id === draftId);
   const [text, setText] = useState(current?.text || "");
@@ -101,12 +107,14 @@ export function StudyAssistant() {
     content: string;
     status: string;
   } | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [assistantError, setAssistantError] = useState("");
   const notice = useNotice();
   const topics = courseTopics(gaps, quizzes);
   // Switching drafts intentionally replaces the editor; background course refreshes do not.
   useEffect(() => {
+    if (conversationId) return;
     setText(current?.text || "");
     setTopic(current?.topic || "");
     setMode(
@@ -115,7 +123,67 @@ export function StudyAssistant() {
     setTurns([]);
     setPendingTurn(null);
     setAssistantError("");
-  }, [draftId, current?.id, params.get("mode")]);
+  }, [draftId, current?.id, params.get("mode"), conversationId]);
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ conversations: ConversationSummary[] }>(
+      `/student/classes/${encodeURIComponent(course.id)}/conversations`,
+    )
+      .then((result) => {
+        if (!cancelled) setConversations(result.conversations);
+      })
+      .catch((error) => {
+        if (!cancelled) setAssistantError(errorMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [course.id]);
+  useEffect(() => {
+    if (!conversationId) {
+      setTurns([]);
+      return;
+    }
+    let cancelled = false;
+    void api<ConversationDetail>(
+      `/student/conversations/${encodeURIComponent(conversationId)}`,
+    )
+      .then(({ conversation, messages }) => {
+        if (cancelled) return;
+        if (conversation.class_id !== course.id) {
+          setAssistantError("This conversation belongs to another course.");
+          setParams({}, { replace: true });
+          return;
+        }
+        const restored: {
+          question: string;
+          response: StudyAssistantResponse;
+        }[] = [];
+        for (let index = 0; index + 1 < messages.length; index += 2) {
+          const user = messages[index];
+          const assistant = messages[index + 1];
+          if (user?.role !== "user" || assistant?.role !== "assistant")
+            continue;
+          restored.push({
+            question: user.content,
+            response: {
+              content: assistant.content,
+              sources: assistant.sources,
+              grounded: Boolean(assistant.grounded),
+              requiresHumanReview: Boolean(assistant.requiresHumanReview),
+              conversationId,
+            },
+          });
+        }
+        setTurns(restored);
+      })
+      .catch((error) => {
+        if (!cancelled) setAssistantError(errorMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, course.id, setParams]);
   const dirty =
     text !== (current?.text || "") ||
     mode !== (current?.mode || "question") ||
@@ -132,11 +200,6 @@ export function StudyAssistant() {
     event.preventDefault();
     const question = text.trim();
     if (!question || busy) return;
-    const history = turns.slice(-10).flatMap((turn) => [
-      { role: "user" as const, content: turn.question },
-      { role: "assistant" as const, content: turn.response.content },
-    ]);
-
     setBusy(true);
     setAssistantError("");
     setPendingTurn({
@@ -148,7 +211,10 @@ export function StudyAssistant() {
     try {
       const response = await streamStudyAssistant(
         course.id,
-        { message: question, history },
+        {
+          message: question,
+          ...(conversationId ? { conversationId } : {}),
+        },
         (update) => {
           setPendingTurn((currentTurn) => {
             if (currentTurn === null) return currentTurn;
@@ -168,6 +234,14 @@ export function StudyAssistant() {
       setTurns((currentTurns) => [...currentTurns, { question, response }]);
       setPendingTurn(null);
       setText("");
+      setParams({ conversation: response.conversationId }, { replace: true });
+      void api<{ conversations: ConversationSummary[] }>(
+        `/student/classes/${encodeURIComponent(course.id)}/conversations`,
+      )
+        .then((updated) => setConversations(updated.conversations))
+        .catch(() =>
+          notice("Answer saved. Refresh to update your conversation list."),
+        );
       if (response.sources.length > 0) setSourcesOpen(true);
     } catch (error) {
       setPendingTurn(null);
@@ -183,7 +257,40 @@ export function StudyAssistant() {
       !saveDraft({ text: text.trim(), topic, mode }, current?.id)
     )
       return;
+    setTurns([]);
+    setText("");
     setParams(id ? { draft: id } : {});
+  }
+  function switchConversation(id: string) {
+    if (
+      dirty &&
+      text.trim() &&
+      !saveDraft({ text: text.trim(), topic, mode }, current?.id)
+    )
+      return;
+    setTurns([]);
+    setText("");
+    setParams(id ? { conversation: id } : {});
+  }
+  async function removeConversation() {
+    if (!conversationId) return;
+    try {
+      await api(
+        `/student/conversations/${encodeURIComponent(conversationId)}`,
+        {
+          method: "DELETE",
+        },
+      );
+      setConversations((items) =>
+        items.filter((item) => item.id !== conversationId),
+      );
+      setTurns([]);
+      setText("");
+      setParams({}, { replace: true });
+      notice("Conversation deleted.");
+    } catch (error) {
+      setAssistantError(errorMessage(error));
+    }
   }
   return (
     <div className={`s-assistant-page ${sourcesOpen ? "with-sources" : ""}`}>
@@ -218,15 +325,45 @@ export function StudyAssistant() {
 
         <div className="s-draft-bar">
           <History size={16} aria-hidden="true" />
+          <label className="sr-only" htmlFor="study-conversations">
+            Study conversations
+          </label>
+          <select
+            id="study-conversations"
+            value={conversationId || ""}
+            onChange={(event) => switchConversation(event.target.value)}
+          >
+            <option value="">New conversation</option>
+            {conversations.map((conversation) => (
+              <option key={conversation.id} value={conversation.id}>
+                {conversation.title}
+              </option>
+            ))}
+          </select>
+          {conversationId && (
+            <button
+              className="s-icon-button"
+              type="button"
+              title="Delete conversation"
+              aria-label="Delete conversation"
+              onClick={() => void removeConversation()}
+            >
+              <Trash2 size={17} />
+            </button>
+          )}
+        </div>
+
+        <div className="s-draft-bar">
+          <Bookmark size={16} aria-hidden="true" />
           <label className="sr-only" htmlFor="study-drafts">
-            Saved study drafts
+            Saved drafts in this browser
           </label>
           <select
             id="study-drafts"
             value={current?.id || ""}
             onChange={(event) => switchDraft(event.target.value)}
           >
-            <option value="">New conversation</option>
+            <option value="">No saved draft</option>
             {drafts.map((draft) => (
               <option key={draft.id} value={draft.id}>
                 {draft.text.slice(0, 65)}

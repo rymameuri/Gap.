@@ -23,6 +23,7 @@ import {
   type StudentClassCard,
   type TeacherClassCard,
 } from "../repositories/classes.js";
+import { settleInvitation } from "../repositories/invitations.js";
 
 /**
  * Returns the class when `teacherId` owns it.
@@ -103,7 +104,10 @@ export function enrollByEmail(
     throw new NotFoundError(
       "Student account not found. Use a seeded demo account.",
     );
-  enrollStudent(store, classId, studentId);
+  store.transaction(() => {
+    enrollStudent(store, classId, studentId);
+    settleInvitation(store, classId, studentId, new Date().toISOString());
+  });
 }
 
 export interface JoinResult {
@@ -128,10 +132,13 @@ export function joinClass(
       "That class code was not found. Check it with your teacher.",
     );
   const alreadyJoined = isMember(store, course.id, studentId);
-  if (!alreadyJoined)
-    store.transaction(() => {
+  store.transaction(() => {
+    if (!alreadyJoined) {
       addMember(store, course.id, studentId);
       store.event(course.id, "Student", "Joined class", {}, studentId);
-    });
+    }
+    // Joining by code answers any invitation to the same class.
+    settleInvitation(store, course.id, studentId, new Date().toISOString());
+  });
   return { id: course.id, name: course.name, alreadyJoined };
 }

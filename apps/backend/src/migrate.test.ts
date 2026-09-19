@@ -11,7 +11,11 @@ import {
   rollback,
   schemaSnapshot,
 } from "./migrate.js";
-import { MIGRATIONS, type Migration } from "./migrations/index.js";
+import {
+  MIGRATIONS,
+  learningRecords,
+  type Migration,
+} from "./migrations/index.js";
 import { SCHEMA_SNAPSHOT_FILE, renderSchemaSnapshot } from "./schema-file.js";
 import { seed } from "./seed.js";
 
@@ -94,7 +98,8 @@ describe("migrate", () => {
     const before = store.all(
       "SELECT id,name,syllabus FROM classes ORDER BY id",
     );
-    assert.deepEqual(rollback(store, 4), [
+    assert.deepEqual(rollback(store, 5), [
+      "0006-class-invitations",
       "0005-learning-records",
       "0004-gap-resolutions",
       "0003-backfill-join-codes",
@@ -181,6 +186,7 @@ describe("join code backfill", () => {
       "0003-backfill-join-codes",
       "0004-gap-resolutions",
       "0005-learning-records",
+      "0006-class-invitations",
     ]);
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",
@@ -210,6 +216,7 @@ describe("legacy databases", () => {
         "0003-backfill-join-codes",
         "0004-gap-resolutions",
         "0005-learning-records",
+        "0006-class-invitations",
       ],
     });
     const course = store.one<{ name: string; join_code: string }>(
@@ -231,6 +238,7 @@ describe("legacy databases", () => {
         "0003-backfill-join-codes",
         "0004-gap-resolutions",
         "0005-learning-records",
+        "0006-class-invitations",
       ],
     });
     const course = store.one<{ join_code: string }>(
@@ -252,6 +260,37 @@ describe("legacy databases", () => {
       ]);
     assert.deepEqual(columns(adopted), columns(fresh));
   });
+});
+
+test("adopts the early learning-records migration without losing existing data", async () => {
+  const store = await blank();
+  migrate(store, MIGRATIONS.slice(0, 3));
+  seed(store, "demo-password");
+  store.transaction(() => {
+    learningRecords.up(store);
+    store.run("ALTER TABLE agent_reviews DROP COLUMN message_id");
+    store.run(
+      "INSERT INTO schema_migrations(id,applied_at) VALUES('0004-learning-records','2026-09-19T00:00:00.000Z')",
+    );
+    store.run(
+      "INSERT INTO conversations(id,class_id,student_id,title,created_at,updated_at) VALUES('old-chat','physics','sara','Old chat','2026-09-19T00:00:00.000Z','2026-09-19T00:00:00.000Z')",
+    );
+    store.run(
+      "INSERT INTO agent_reviews(id,class_id,student_id,conversation_id,kind,content,sources,issues,status,created_at) VALUES('old-review','physics','sara','old-chat','study_response','Review me','[]','[]','pending','2026-09-19T00:00:00.000Z')",
+    );
+  });
+  assert.deepEqual(migrate(store), {
+    adopted: ["0005-learning-records"],
+    applied: ["0004-gap-resolutions", "0006-class-invitations"],
+  });
+  assert.deepEqual(appliedMigrations(store), IDS);
+  assert.ok(store.one("SELECT 1 FROM gap_resolutions LIMIT 1") === undefined);
+  const review = store.one<{ content: string; message_id: string | null }>(
+    "SELECT content,message_id FROM agent_reviews WHERE id='old-review'",
+  );
+  assert.deepEqual(review, { content: "Review me", message_id: null });
+  assert.deepEqual(migrate(store), { adopted: [], applied: [] });
+  store.db.close();
 });
 
 describe("persistence", () => {

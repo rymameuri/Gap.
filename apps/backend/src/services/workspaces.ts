@@ -55,6 +55,10 @@ import {
   explainClusterPriorities,
   type PriorityExplanation,
 } from "../explain/cluster-priority.js";
+import {
+  classInvitationList,
+  type TeacherInvitation,
+} from "../repositories/invitations.js";
 import { requireOwnedClass } from "./classes.js";
 import { pendingAgentReviews, type AgentReviewView } from "./agent-reviews.js";
 
@@ -99,6 +103,7 @@ export interface TeacherWorkspace {
   clusters: ClusterView[];
   gaps: TeacherGapRow[];
   roster: RosterEntry[];
+  invitations: TeacherInvitation[];
   quizzes: TeacherQuizView[];
   reviews: ReviewView[];
   agentReviews: AgentReviewView[];
@@ -134,6 +139,7 @@ export function teacherWorkspace(
     clusters: explainedClusters(openClusters(store, course.id)),
     gaps: classGaps(store, course.id),
     roster: classRoster(store, course.id),
+    invitations: classInvitationList(store, course.id),
     quizzes: classQuizzes(store, course.id).map((row) => ({
       ...row,
       questions: parseQuestions(row.questions),

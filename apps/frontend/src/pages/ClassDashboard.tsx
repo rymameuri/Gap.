@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowUpRight, Plus, Users, BookOpen, KeyRound } from "lucide-react";
+import {
+  ArrowUpRight,
+  Plus,
+  Users,
+  BookOpen,
+  KeyRound,
+  Mail,
+} from "lucide-react";
 import { api, post } from "../services/api";
 import { useSession } from "../services/session";
 import { Brand, ErrorBox } from "../components/ui";
-import type { Course } from "../services/types";
+import type { Course, StudentInvitation } from "../services/types";
 type ClassCard = Course & {
   join_code?: string;
   students?: number;
@@ -29,7 +36,12 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     [syllabus, setSyllabus] = useState(""),
     [importError, setImportError] = useState(""),
     [code, setCode] = useState(""),
-    [created, setCreated] = useState<ClassCard | null>(null);
+    [created, setCreated] = useState<ClassCard | null>(null),
+    [invitations, setInvitations] = useState<StudentInvitation[]>([]),
+    [answering, setAnswering] = useState(""),
+    [accepted, setAccepted] = useState<{ id: string; name: string } | null>(
+      null,
+    );
   const formRef = useRef<HTMLElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +49,14 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     try {
       const result = await api<{ courses: ClassCard[] }>("/classes");
       setCourses(result.courses);
+      if (role === "student")
+        setInvitations(
+          (
+            await api<{ invitations: StudentInvitation[] }>(
+              "/student/invitations",
+            )
+          ).invitations,
+        );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to load classes");
     } finally {
@@ -51,6 +71,26 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     firstInputRef.current?.focus({ preventScroll: true });
   }, [form]);
+  async function answer(invitation: StudentInvitation, accept: boolean) {
+    setAnswering(invitation.id);
+    setError("");
+    setAccepted(null);
+    try {
+      await post(
+        "/student/invitations/" +
+          encodeURIComponent(invitation.id) +
+          (accept ? "/accept" : "/decline"),
+      );
+      if (accept)
+        setAccepted({ id: invitation.class_id, name: invitation.class_name });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Please try again");
+      await load();
+    } finally {
+      setAnswering("");
+    }
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -233,7 +273,8 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                   />
                   {importError && <p role="alert">{importError}</p>}
                   <p className="muted">
-                    PDF and DOCX imports are not available yet.
+                    PDF, Word, and PowerPoint files can be imported from Class
+                    materials after you create the class.
                   </p>
                 </>
               ) : (
@@ -270,6 +311,52 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                 </button>
               </div>
             </form>
+          </section>
+        )}
+        {accepted && (
+          <section className="class-success" aria-live="polite">
+            <div>
+              <strong>You joined {accepted.name}.</strong>
+              <p>The course is now in your classes.</p>
+            </div>
+            <Link className="btn" to={classPath("student", accepted.id)}>
+              Open course <ArrowUpRight size={15} />
+            </Link>
+          </section>
+        )}
+        {invitations.length > 0 && (
+          <section className="panel class-invitations" aria-live="polite">
+            <h2>
+              <Mail size={18} /> Class invitations
+            </h2>
+            <ul>
+              {invitations.map((invitation) => (
+                <li key={invitation.id}>
+                  <div>
+                    <strong>{invitation.class_name}</strong>
+                    <p className="muted">
+                      {invitation.teacher_name} invited you to this class.
+                    </p>
+                  </div>
+                  <div className="class-form-actions">
+                    <button
+                      className="btn primary"
+                      disabled={answering !== ""}
+                      onClick={() => void answer(invitation, true)}
+                    >
+                      {answering === invitation.id ? "Joining..." : "Accept"}
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={answering !== ""}
+                      onClick={() => void answer(invitation, false)}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
         <div className="class-section-heading">

@@ -5,6 +5,10 @@ import { JOIN_ATTEMPTS_PER_WINDOW } from "../constants.js";
 import { asyncRoute, attemptLimit } from "../http/middleware.js";
 import { submitQuiz } from "../services/assessments.js";
 import { joinClass } from "../services/classes.js";
+import {
+  respondToInvitation,
+  studentInvitations,
+} from "../services/invitations.js";
 import { askQuestion, recheckGap } from "../services/learning.js";
 import { studentWorkspace } from "../services/workspaces.js";
 import {
@@ -29,6 +33,27 @@ export function registerStudentRoutes(
     asyncRoute((req, res) => {
       const result = joinClass(store, req.user.id, req.body);
       res.status(result.alreadyJoined ? 200 : 201).json(result);
+    }),
+  );
+
+  app.get("/api/student/invitations", studentOnly, (req, res) => {
+    res.json({ invitations: studentInvitations(store, req.user.id) });
+  });
+
+  app.post(
+    "/api/student/invitations/:id/accept",
+    studentOnly,
+    asyncRoute((req, res) => {
+      res.json(respondToInvitation(store, req.user.id, param(req, "id"), true));
+    }),
+  );
+
+  app.post(
+    "/api/student/invitations/:id/decline",
+    studentOnly,
+    asyncRoute((req, res) => {
+      respondToInvitation(store, req.user.id, param(req, "id"), false);
+      res.json({ ok: true });
     }),
   );
 

@@ -202,6 +202,72 @@ p {
   color: #7d808a;
   font-size: 14px;
 }
+.course-files {
+  margin: 24px 0;
+  padding: 22px 0;
+  border-top: 1px solid #e5e5e9;
+}
+.course-files-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.course-files-heading p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.course-files-heading .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.course-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.course-files-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #ececef;
+  padding: 11px 0;
+}
+.course-files-list li span {
+  flex: 1;
+  min-width: 0;
+}
+.course-files-list strong,
+.course-files-list small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.course-files-list small {
+  color: #747780;
+  font-size: 13px;
+}
+.course-files-list a,
+.course-files-list button {
+  border: 0;
+  background: transparent;
+  color: #404756;
+  padding: 7px;
+  border-radius: 5px;
+  display: inline-flex;
+}
+.course-files-list a:hover,
+.course-files-list button:hover {
+  background: #eef0f3;
+}
+@media (max-width: 600px) {
+  .course-files-heading {
+    flex-wrap: wrap;
+  }
+}
 .gap {
   padding: 20px 0;
   border-top: 1px solid #eee;
@@ -1473,6 +1539,41 @@ button:disabled {
   font-size: 13px;
   color: #786b80;
   margin: 8px 0 0;
+}
+.class-invitations {
+  margin-bottom: 28px;
+}
+.class-invitations h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+}
+.class-invitations ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.class-invitations li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 14px 0;
+  border-top: 1px solid #e6e1ea;
+}
+.class-invitations li p {
+  margin: 4px 0 0;
+}
+.class-invitations .class-form-actions {
+  margin-top: 0;
+}
+.roster-import {
+  margin: 18px 0;
+}
+.roster-import section {
+  margin-top: 12px;
 }
 .class-code {
   display: flex;
