@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, Plus, Users, BookOpen, KeyRound } from "lucide-react";
 import { api, post } from "../services/api";
@@ -29,6 +29,9 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
     [syllabus, setSyllabus] = useState(""),
     [code, setCode] = useState(""),
     [created, setCreated] = useState<ClassCard | null>(null);
+  const formRef = useRef<HTMLElement>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
   async function load() {
     try {
       const result = await api<{ courses: ClassCard[] }>("/classes");
@@ -42,6 +45,11 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
   useEffect(() => {
     void load();
   }, []);
+  useEffect(() => {
+    if (!form) return;
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    firstInputRef.current?.focus({ preventScroll: true });
+  }, [form]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -146,7 +154,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
           </section>
         )}
         {form && (
-          <section className="class-form panel">
+          <section className="class-form panel" ref={formRef}>
             <h2>
               {role === "teacher"
                 ? "Start a new classroom"
@@ -163,6 +171,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                   <label htmlFor="new-class-name">Class name</label>
                   <input
                     id="new-class-name"
+                    ref={firstInputRef}
                     required
                     minLength={3}
                     maxLength={150}
@@ -171,16 +180,16 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                     placeholder="e.g. Introduction to Physics"
                   />
                   <label htmlFor="new-class-syllabus">
-                    Syllabus{" "}
-                    <span className="muted">(optional — add it later)</span>
+                    Syllabus text{" "}
+                    <span className="muted">(optional)</span>
                   </label>
                   <textarea
                     id="new-class-syllabus"
                     value={syllabus}
                     onChange={(e) => setSyllabus(e.target.value)}
                     maxLength={50000}
-                    rows={3}
-                    placeholder="Topics and learning objectives"
+                    rows={6}
+                    placeholder="Paste course topics, readings, and learning objectives"
                   />
                 </>
               ) : (
@@ -188,6 +197,7 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
                   <label htmlFor="join-code">Class code</label>
                   <input
                     id="join-code"
+                    ref={firstInputRef}
                     required
                     pattern="[A-Za-z2-9]{8}"
                     maxLength={8}

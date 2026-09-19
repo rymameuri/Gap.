@@ -1388,9 +1388,11 @@ button:disabled {
   place-items: center;
 }
 .class-form {
-  max-width: 660px;
-  padding: 28px;
+  width: 100%;
+  max-width: 920px;
+  padding: clamp(24px, 3vw, 40px);
   margin-bottom: 28px;
+  scroll-margin-top: 20px;
 }
 .class-form h2 {
   margin-top: 0;
@@ -1451,6 +1453,12 @@ button:disabled {
   }
   .class-success {
     flex-wrap: wrap;
+  }
+}
+@media (max-width: 760px) {
+  .class-dash-title {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 @media (max-width: 600px) {
