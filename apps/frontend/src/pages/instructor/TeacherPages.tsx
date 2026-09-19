@@ -1,3 +1,4 @@
+import { QuizPreview } from "../../components/QuizPreview";
 import { MaterialFileImport } from "../../components/MaterialFileImport";
 import { CourseFiles } from "../../components/CourseFiles";
 import { RosterImport } from "../../components/RosterImport";
@@ -10,6 +11,9 @@ import {
   ArrowUpRight,
   MessageSquare,
   ArrowRight,
+  Eye,
+  ListChecks,
+  Pencil,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ClassLink as Link } from "../../components/ClassLink";
@@ -27,7 +31,7 @@ import { SpeechInputButton } from "../../components/SpeechInputButton";
 import { appendSpeechTranscript } from "../../components/speech-recognition";
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "The action could not be completed.";
-function useAction() {
+export function useAction() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     notice = useNotice();
@@ -314,7 +318,8 @@ export function Assessments() {
   const [topic, setTopic] = useState(
       data.course.id === "physics" ? "Force and motion" : "",
     ),
-    [draft, setDraft] = useState<Quiz | null>(null);
+    [draft, setDraft] = useState<Quiz | null>(null),
+    [preview, setPreview] = useState<Quiz | null>(null);
   useEffect(() => {
     setTopic(data.course.id === "physics" ? "Force and motion" : "");
     setDraft(null);
@@ -413,8 +418,8 @@ export function Assessments() {
       <section className="panel">
         <h2>Your assessments</h2>
         {data.quizzes.map((q) => (
-          <div className="gap" key={q.id}>
-            <div>
+          <div className="quiz-row" key={q.id}>
+            <div className="quiz-row-info">
               <Badge status={q.status} />
               <h3>{q.title}</h3>
               <span className="muted">
@@ -422,21 +427,29 @@ export function Assessments() {
                 {q.engine === "local" ? "Local teaching bank" : "Live AI"}
               </span>
             </div>
-            {q.status === "draft" ? (
-              <button
-                className="btn"
-                onClick={() => setDraft(structuredClone(q))}
-              >
-                Review draft
+            <div className="quiz-row-actions">
+              <button className="btn small" onClick={() => setPreview(q)}>
+                <Eye size={15} /> View as student
               </button>
-            ) : (
-              <Link className="btn" to="/teacher/review">
-                View review queue
-              </Link>
-            )}
+              {q.status === "draft" ? (
+                <button
+                  className="btn small primary"
+                  onClick={() => setDraft(structuredClone(q))}
+                >
+                  <Pencil size={15} /> Review draft
+                </button>
+              ) : (
+                <Link className="btn small" to="/teacher/review">
+                  <ListChecks size={15} /> View review queue
+                </Link>
+              )}
+            </div>
           </div>
         ))}
       </section>
+      {preview && (
+        <QuizPreview quiz={preview} onClose={() => setPreview(null)} />
+      )}
       {draft && (
         <section className="panel">
           <h2>Review and edit</h2>

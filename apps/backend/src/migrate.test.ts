@@ -98,7 +98,12 @@ describe("migrate", () => {
     const before = store.all(
       "SELECT id,name,syllabus FROM classes ORDER BY id",
     );
-    assert.deepEqual(rollback(store, 5), [
+    assert.deepEqual(rollback(store, 10), [
+      "0011-companion-chats",
+      "0010-companion-messages",
+      "0009-wellbeing-flags",
+      "0008-presentations",
+      "0007-sources",
       "0006-class-invitations",
       "0005-learning-records",
       "0004-gap-resolutions",
@@ -187,6 +192,11 @@ describe("join code backfill", () => {
       "0004-gap-resolutions",
       "0005-learning-records",
       "0006-class-invitations",
+      "0007-sources",
+      "0008-presentations",
+      "0009-wellbeing-flags",
+      "0010-companion-messages",
+      "0011-companion-chats",
     ]);
     const course = store.one<{ join_code: string }>(
       "SELECT join_code FROM classes WHERE id='c1'",
@@ -217,6 +227,11 @@ describe("legacy databases", () => {
         "0004-gap-resolutions",
         "0005-learning-records",
         "0006-class-invitations",
+        "0007-sources",
+        "0008-presentations",
+        "0009-wellbeing-flags",
+        "0010-companion-messages",
+        "0011-companion-chats",
       ],
     });
     const course = store.one<{ name: string; join_code: string }>(
@@ -239,6 +254,11 @@ describe("legacy databases", () => {
         "0004-gap-resolutions",
         "0005-learning-records",
         "0006-class-invitations",
+        "0007-sources",
+        "0008-presentations",
+        "0009-wellbeing-flags",
+        "0010-companion-messages",
+        "0011-companion-chats",
       ],
     });
     const course = store.one<{ join_code: string }>(
@@ -281,7 +301,15 @@ test("adopts the early learning-records migration without losing existing data",
   });
   assert.deepEqual(migrate(store), {
     adopted: ["0005-learning-records"],
-    applied: ["0004-gap-resolutions", "0006-class-invitations"],
+    applied: [
+      "0004-gap-resolutions",
+      "0006-class-invitations",
+      "0007-sources",
+      "0008-presentations",
+      "0009-wellbeing-flags",
+      "0010-companion-messages",
+      "0011-companion-chats",
+    ],
   });
   assert.deepEqual(appliedMigrations(store), IDS);
   assert.ok(store.one("SELECT 1 FROM gap_resolutions LIMIT 1") === undefined);

@@ -437,6 +437,369 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /api/teacher/classes/{id}/sources:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listSources
+      tags: [teacher]
+      responses:
+        "200":
+          description: Presentations and links added as course sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items: { $ref: "#/components/schemas/Source" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/sources/decks:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: addDeck
+      tags: [teacher]
+      description: Add a presentation as a course source. The query `name` is the file name.
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: Source stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/sources/links:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: addLink
+      tags: [teacher]
+      description: Add a web page as a course source. The page is read in the background.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+      responses:
+        "201":
+          description: Link stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/teacher/classes/{id}/companion:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: askTeacherCompanion
+      tags: [teacher]
+      description: Ask the class-aware teaching companion. Omit chatId to start a new chat. Answers draw on a curated teaching KB and a snapshot of this class.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+                chatId: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Companion reply, saved to the chat.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [chatId, title, content, sources]
+                properties:
+                  chatId: { type: string }
+                  title: { type: string }
+                  content: { type: string }
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, title]
+                      properties:
+                        kind: { type: string, enum: [pedagogy, class] }
+                        title: { type: string }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { description: Companion unavailable. }
+
+  /api/teacher/classes/{id}/companion/chats:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listCompanionChats
+      tags: [teacher]
+      description: The teacher's saved companion chats for this class, most recent first.
+      responses:
+        "200":
+          description: Saved chats.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [chats]
+                properties:
+                  chats:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, title, updated_at]
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        updated_at: { type: string }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/companion/chats/{chatId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: chatId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getCompanionChat
+      tags: [teacher]
+      description: The messages of one saved chat, oldest first.
+      responses:
+        "200":
+          description: Chat messages.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages]
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      required: [role, content, sources]
+                      properties:
+                        role: { type: string, enum: [user, assistant] }
+                        content: { type: string }
+                        sources:
+                          type: array
+                          items:
+                            type: object
+                            required: [kind, title]
+                            properties:
+                              kind: { type: string, enum: [pedagogy, class] }
+                              title: { type: string }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteCompanionChat
+      tags: [teacher]
+      description: Delete one saved companion chat.
+      responses:
+        "200":
+          description: Chat deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/presentations:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listPresentations
+      tags: [teacher]
+      responses:
+        "200":
+          description: All presentations of the class, most recently edited first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [presentations]
+                properties:
+                  presentations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Presentation" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: createPresentation
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PresentationBody" }
+      responses:
+        "201":
+          description: Draft created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Presentation" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/classes/{id}/presentations/generate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: generatePresentation
+      tags: [teacher]
+      description: Draft a slide deck with the AI from the class syllabus, its ready sources and the teacher's main points. Saved as a draft.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                focus: { type: string, maxLength: 2000 }
+                style: { enum: [lesson, recap] }
+                length: { enum: [short, full] }
+      responses:
+        "201":
+          description: Draft deck created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Presentation" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/presentations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: updatePresentation
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PresentationBody" }
+      responses:
+        "200":
+          description: Saved. A published presentation stays published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deletePresentation
+      tags: [teacher]
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/presentations/{id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: publishPresentation
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [published]
+              properties:
+                published: { type: boolean }
+      responses:
+        "200":
+          description: Students of the class see it only while it is published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/flags/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: updateFlag
+      tags: [teacher]
+      description: Set a wellbeing flag's follow-up status and the teacher's private note.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { enum: [new, reached_out, resolved] }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/teacher/classes/{id}/assessments:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -693,6 +1056,29 @@ paths:
                     items: { $ref: "#/components/schemas/StudentInvitation" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/student/classes/{id}/presentations:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listPublishedPresentations
+      tags: [student]
+      responses:
+        "200":
+          description: Published presentations of a class the student joined.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [presentations]
+                properties:
+                  presentations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Presentation" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/student/invitations/{id}/accept:
     parameters:
@@ -1332,6 +1718,96 @@ components:
         teacher_name: { type: string }
         created_at: { $ref: "#/components/schemas/Timestamp" }
 
+    Source:
+      type: object
+      additionalProperties: false
+      required: [id, type, name, url, status, error, chars, created_at]
+      properties:
+        id: { type: string }
+        type: { enum: [deck, link] }
+        name: { type: string }
+        url: { type: [string, "null"] }
+        status: { enum: [processing, ready, failed] }
+        error: { type: [string, "null"] }
+        chars: { type: [integer, "null"] }
+        created_at: { type: string }
+
+    Slide:
+      type: object
+      additionalProperties: false
+      required: [title, bullets, notes]
+      properties:
+        title: { type: string }
+        bullets: { type: array, items: { type: string } }
+        notes: { type: string }
+
+    PresentationBody:
+      type: object
+      required: [title, slides]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        slides:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/Slide" }
+
+    Presentation:
+      type: object
+      required:
+        [
+          id,
+          class_id,
+          title,
+          slides,
+          status,
+          created_at,
+          updated_at,
+          published_at,
+        ]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        title: { type: string }
+        slides:
+          type: array
+          items: { $ref: "#/components/schemas/Slide" }
+        status: { enum: [draft, published] }
+        created_at: { type: string }
+        updated_at: { type: string }
+        published_at: { type: [string, "null"] }
+
+    WellbeingFlag:
+      type: object
+      required:
+        [
+          id,
+          class_id,
+          student_id,
+          student_name,
+          source,
+          text,
+          category,
+          severity,
+          status,
+          note,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        student_id: { type: string }
+        student_name: { type: string }
+        source: { enum: [question, assistant] }
+        text: { type: string }
+        category: { type: string }
+        severity: { enum: [urgent, high, medium, low] }
+        status: { enum: [new, reached_out, resolved] }
+        note: { type: string }
+        created_at: { type: string }
+        updated_at: { type: string }
+
     RosterPreview:
       type: object
       additionalProperties: false
@@ -1503,6 +1979,7 @@ components:
           gaps,
           roster,
           invitations,
+          flags,
           quizzes,
           reviews,
           agentReviews,
@@ -1528,6 +2005,9 @@ components:
         invitations:
           type: array
           items: { $ref: "#/components/schemas/TeacherInvitation" }
+        flags:
+          type: array
+          items: { $ref: "#/components/schemas/WellbeingFlag" }
         quizzes:
           type: array
           items: { $ref: "#/components/schemas/TeacherQuiz" }

@@ -1,4 +1,3 @@
-import { Students, GapDetails } from "./pages/instructor/ClassDetails";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -16,14 +15,11 @@ import { Login } from "./pages/auth/Login";
 import { ClassDashboard } from "./pages/ClassDashboard";
 import { CreateClass } from "./pages/CreateClass";
 import { Landing } from "./pages/Landing";
-import {
-  Overview,
-  Assessments,
-  ReviewQueue,
-  ContentStudio,
-  Materials,
-  AgentActivity,
-} from "./pages/instructor/TeacherPages";
+import { Home } from "./pages/instructor/Home";
+import { CompanionPage } from "./pages/instructor/CompanionPage";
+import { Materials } from "./pages/instructor/MaterialsPage";
+import { PresentationEditor } from "./pages/instructor/PresentationEditor";
+import { AssessmentsHub, Settings, StudentsHub } from "./pages/instructor/Hubs";
 import { CourseOverview } from "./pages/student/CourseOverview";
 import { StudyAssistant } from "./pages/student/StudyAssistant";
 import { Practice } from "./pages/student/Practice";
@@ -33,6 +29,12 @@ import { Progress } from "./pages/student/Progress";
 import { StudentMaterials } from "./pages/student/Materials";
 import { LegacyStudentRoute } from "./pages/student/LegacyStudentRoute";
 import { useEffect, type ReactNode } from "react";
+function TabRedirect({ to, tab }: { to: string; tab?: string }) {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  if (tab) params.set("tab", tab);
+  return <Navigate replace to={`/teacher/${to}?${params.toString()}`} />;
+}
 function Guard({
   role,
   children,
@@ -128,14 +130,30 @@ createRoot(document.getElementById("root")!).render(
               </Guard>
             }
           >
-            <Route path="overview" element={<Overview />} />
-            <Route path="students" element={<Students />} />
-            <Route path="gaps" element={<GapDetails />} />
-            <Route path="assessments" element={<Assessments />} />
-            <Route path="review" element={<ReviewQueue />} />
-            <Route path="content" element={<ContentStudio />} />
+            <Route path="overview" element={<Home />} />
             <Route path="materials" element={<Materials />} />
-            <Route path="activity" element={<AgentActivity />} />
+            <Route
+              path="materials/presentations/:pid"
+              element={<PresentationEditor />}
+            />
+            <Route path="assessments" element={<AssessmentsHub />} />
+            <Route path="students" element={<StudentsHub />} />
+            <Route path="companion" element={<CompanionPage />} />
+            <Route path="settings" element={<Settings />} />
+            {/* Old addresses still work: they open the matching tab. */}
+            <Route
+              path="gaps"
+              element={<TabRedirect to="students" tab="gaps" />}
+            />
+            <Route
+              path="content"
+              element={<TabRedirect to="students" tab="explanations" />}
+            />
+            <Route
+              path="review"
+              element={<TabRedirect to="assessments" tab="review" />}
+            />
+            <Route path="activity" element={<TabRedirect to="settings" />} />
           </Route>
           <Route
             path="/student"

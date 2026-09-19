@@ -8,6 +8,10 @@ import {
   type AIServiceClient,
 } from "./agents/python-service.js";
 import type { Logger } from "./logger.js";
+import {
+  fetchPage as defaultFetchPage,
+  type PageFetcher,
+} from "./safe-fetch.js";
 import { JSON_BODY_LIMIT } from "./constants.js";
 import {
   errorHandler,
@@ -30,6 +34,8 @@ export interface AppDependencies {
   readonly webRoot?: string;
   /** Test seam; production creates this from validated configuration. */
   readonly aiService?: AIServiceClient | null;
+  /** Test seam for reading linked pages; production fetches over the network. */
+  readonly fetchPage?: PageFetcher;
 }
 
 /** Builds the Express app. Routes are documented in apps/backend/openapi.yaml. */
@@ -39,6 +45,7 @@ export function createApp({
   logger,
   webRoot,
   aiService,
+  fetchPage,
 }: AppDependencies): express.Express {
   const app = express();
   app.disable("x-powered-by");
@@ -49,6 +56,7 @@ export function createApp({
   const context = {
     store,
     config,
+    fetchPage: fetchPage ?? defaultFetchPage,
     queue: new AgentQueue(store, logger),
     aiService:
       aiService === undefined

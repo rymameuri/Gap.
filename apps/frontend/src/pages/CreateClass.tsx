@@ -16,9 +16,7 @@ export function CreateClass() {
         </Link>
         <CreateClassStepper
           onCancel={() => navigate("/teacher")}
-          onCreated={(created) =>
-            navigate("/teacher", { state: { created } })
-          }
+          onCreated={(created) => navigate("/teacher", { state: { created } })}
         />
       </main>
     </div>

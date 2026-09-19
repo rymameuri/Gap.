@@ -14,6 +14,11 @@ export async function api<T>(
     credentials: "same-origin",
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
+  }).catch(() => {
+    throw new ApiError(
+      "Can't reach the server. Check your connection and try again.",
+      0,
+    );
   });
   const data = await response.json();
   if (!response.ok)

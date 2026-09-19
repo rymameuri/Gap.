@@ -154,6 +154,7 @@ export type TeacherData = {
   interventions: Intervention[];
   events: AgentEvent[];
   asked: { id: string; text: string; student_name: string }[];
+  flags: WellbeingFlag[];
   engine: string;
   jobs: { id: string; kind: string; status: string; error?: string }[];
 };
@@ -226,4 +227,50 @@ export type CourseFile = {
   size_bytes: number;
   status: "stored" | "indexed" | "failed";
   created_at: string;
+};
+
+export type Slide = { title: string; bullets: string[]; notes: string };
+export type Presentation = {
+  id: string;
+  class_id: string;
+  title: string;
+  slides: Slide[];
+  status: "draft" | "published";
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+};
+export type Source = {
+  id: string;
+  type: "deck" | "link";
+  name: string;
+  url: string | null;
+  status: "processing" | "ready" | "failed";
+  error: string | null;
+  chars: number;
+  created_at: string;
+};
+
+export type FlagSeverity = "urgent" | "high" | "medium" | "low";
+export type FlagStatus = "new" | "reached_out" | "resolved";
+export type FlagCategory =
+  | "self_harm"
+  | "safety"
+  | "distress"
+  | "low_mood"
+  | "anxiety"
+  | "isolation"
+  | "quitting";
+export type WellbeingFlag = {
+  id: string;
+  student_id: string;
+  student_name: string;
+  source: "question" | "assistant";
+  text: string;
+  category: FlagCategory;
+  severity: FlagSeverity;
+  status: FlagStatus;
+  note: string;
+  created_at: string;
+  updated_at: string;
 };

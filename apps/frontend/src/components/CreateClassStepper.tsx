@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Upload, X, Check } from "lucide-react";
-import { post } from "../services/api";
+import { ApiError, post } from "../services/api";
 
 const STEPS = [
   "Name your class",
@@ -15,21 +15,27 @@ const MAX_DOCX_BYTES = 5_000_000;
 const MAX_DECK_BYTES = 50_000_000;
 const DECK_EXT = /\.(pptx|pdf)$/i;
 
-type DeckFile = { id: string; name: string; error?: string };
+type DeckFile = { id: string; name: string; file: File; error?: string };
 type LinkItem = { url: string; host: string };
 
 function countTopics(text: string) {
   return text
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l.length > 2 && (/^([-*•]|\d+[.)]|week\s*\d+)/i.test(l) || l.length < 80))
-    .length;
+    .filter(
+      (l) =>
+        l.length > 2 &&
+        (/^([-*•]|\d+[.)]|week\s*\d+)/i.test(l) || l.length < 80),
+    ).length;
 }
 
 function parseUrl(raw: string): LinkItem | string {
   try {
     const url = new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw);
-    if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes("."))
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      !url.hostname.includes(".")
+    )
       return "Enter a valid web address.";
     return { url: url.toString(), host: url.hostname.replace(/^www\./, "") };
   } catch {
@@ -47,6 +53,7 @@ export function CreateClassStepper({
     join_code: string;
     name: string;
     syllabus: string;
+    failed: string[];
   }) => void;
 }) {
   const [step, setStep] = useState(0),
@@ -59,6 +66,7 @@ export function CreateClassStepper({
     [linkInput, setLinkInput] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
+    [progress, setProgress] = useState(""),
     [error, setError] = useState(""),
     [dragging, setDragging] = useState<"syllabus" | "deck" | "">("");
   const syllabusInput = useRef<HTMLInputElement>(null);
@@ -87,7 +95,9 @@ export function CreateClassStepper({
       if (isDocx) {
         const mammoth = await import("mammoth/mammoth.browser");
         content = (
-          await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+          await mammoth.extractRawText({
+            arrayBuffer: await file.arrayBuffer(),
+          })
         ).value.trim();
       } else {
         content = await file.text();
@@ -112,6 +122,7 @@ export function CreateClassStepper({
     const next: DeckFile[] = Array.from(files).map((f) => ({
       id: `${f.name}-${f.size}-${f.lastModified}`,
       name: f.name,
+      file: f,
       error: !DECK_EXT.test(f.name)
         ? "Only .pptx and .pdf files are supported."
         : f.size > MAX_DECK_BYTES
@@ -142,6 +153,24 @@ export function CreateClassStepper({
     setStep(to);
   }
 
+  async function uploadDeck(classId: string, deck: DeckFile) {
+    const response = await fetch(
+      `/api/teacher/classes/${encodeURIComponent(classId)}/sources/decks?name=${encodeURIComponent(deck.name)}`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: deck.file,
+      },
+    );
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new ApiError(data.error ?? "Upload failed.", response.status);
+    }
+  }
+
   async function create() {
     setBusy(true);
     setError("");
@@ -150,10 +179,35 @@ export function CreateClassStepper({
         "/teacher/classes",
         { name: name.trim(), syllabus },
       );
-      onCreated({ ...result, name: name.trim(), syllabus });
+      // The class exists now, so a failed upload never loses it; report what to retry.
+      const jobs: { label: string; run: () => Promise<unknown> }[] = [
+        ...validDecks.map((d) => ({
+          label: d.name,
+          run: () => uploadDeck(result.id, d),
+        })),
+        ...links.map((l) => ({
+          label: l.host,
+          run: () =>
+            post(
+              `/teacher/classes/${encodeURIComponent(result.id)}/sources/links`,
+              {
+                url: l.url,
+              },
+            ),
+        })),
+      ];
+      const failed: string[] = [];
+      for (const [i, job] of jobs.entries()) {
+        setProgress(`Saving ${String(i + 1)} of ${String(jobs.length)}…`);
+        try {
+          await job.run();
+        } catch {
+          failed.push(job.label);
+        }
+      }
+      onCreated({ ...result, name: name.trim(), syllabus, failed });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Please try again");
-    } finally {
       setBusy(false);
     }
   }
@@ -284,8 +338,8 @@ export function CreateClassStepper({
                 <Check size={16} />
                 <span>
                   {syllabusFile ? `${syllabusFile}: ` : ""}We found{" "}
-                  <strong>{topics}</strong> topic{topics === 1 ? "" : "s"}.
-                  Look right?
+                  <strong>{topics}</strong> topic{topics === 1 ? "" : "s"}. Look
+                  right?
                 </span>
               </div>
             )}
@@ -336,7 +390,9 @@ export function CreateClassStepper({
                 {decks.map((d) => (
                   <li key={d.id} className={d.error ? "failed" : ""}>
                     <span>{d.name}</span>
-                    <span className="muted">{d.error ?? "Ready to attach"}</span>
+                    <span className="muted">
+                      {d.error ?? "Ready to attach"}
+                    </span>
                     <button
                       type="button"
                       aria-label={`Remove ${d.name}`}
@@ -351,14 +407,16 @@ export function CreateClassStepper({
               </ul>
             )}
             <p className="stepper-hint">
-              Deck analysis isn't live yet, so these are not stored or used.
+              Saved with your class when you create it.
             </p>
           </>
         )}
 
         {step === 3 && (
           <>
-            <p>Textbook pages, Khan Academy playlists, your school's resources.</p>
+            <p>
+              Textbook pages, Khan Academy playlists, your school's resources.
+            </p>
             <label htmlFor="link-input">Website address</label>
             <div className="link-row">
               <input
@@ -401,7 +459,7 @@ export function CreateClassStepper({
               </ul>
             )}
             <p className="stepper-hint">
-              Links aren't fetched yet, so these are not stored or used.
+              Saved with your class. We read each page in the background.
             </p>
           </>
         )}
@@ -420,13 +478,25 @@ export function CreateClassStepper({
           </>
         )}
 
-        {notice && <p role="alert" className="stepper-notice">{notice}</p>}
-        {error && <p role="alert" className="stepper-notice">{error}</p>}
+        {notice && (
+          <p role="alert" className="stepper-notice">
+            {notice}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="stepper-notice">
+            {error}
+          </p>
+        )}
         {step > 0 && footer}
 
         <div className="stepper-actions">
           {step > 0 ? (
-            <button type="button" className="btn ghost" onClick={() => go(step - 1)}>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => go(step - 1)}
+            >
               Back
             </button>
           ) : (
@@ -436,12 +506,20 @@ export function CreateClassStepper({
           )}
           <div className="stepper-actions-right">
             {step > 0 && !isLast && (
-              <button type="button" className="btn ghost" onClick={() => go(step + 1)}>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => go(step + 1)}
+              >
                 Skip for now
               </button>
             )}
             <button className="btn primary" disabled={busy || !nameOk}>
-              {isLast ? (busy ? "Creating…" : "Create class") : "Continue"}
+              {isLast
+                ? busy
+                  ? progress || "Creating…"
+                  : "Create class"
+                : "Continue"}
             </button>
           </div>
         </div>

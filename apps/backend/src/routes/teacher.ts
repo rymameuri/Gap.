@@ -28,19 +28,90 @@ import {
   previewRoster,
   revokeInvitation,
 } from "../services/invitations.js";
+import {
+  askCompanion,
+  companionChatMessages,
+  deleteCompanionChat,
+  listCompanionChats,
+} from "../services/companion.js";
+import { addDeck, addLink, listSources } from "../services/sources.js";
+import {
+  createPresentation,
+  deletePresentation,
+  generatePresentation,
+  listPresentations,
+  setPublished,
+  updatePresentation,
+} from "../services/presentations.js";
+import { updateFlagStatus } from "../services/wellbeing.js";
 import { teacherWorkspace } from "../services/workspaces.js";
 import { resolveAgentReview } from "../services/agent-reviews.js";
 import { param, queryString, type RouteContext } from "./context.js";
 
 export function registerTeacherRoutes(
   app: Express,
-  { store, queue, aiService }: RouteContext,
+  { store, queue, aiService, fetchPage }: RouteContext,
 ): void {
   const ok = { ok: true } as const;
 
   app.get("/api/teacher/workspace", teacherOnly, (req, res) => {
     res.json(teacherWorkspace(store, req.user.id, queryString(req, "classId")));
   });
+
+  app.get(
+    "/api/teacher/classes/:id/companion/chats",
+    teacherOnly,
+    (req, res) => {
+      res.json({
+        chats: listCompanionChats(store, req.user.id, param(req, "id")),
+      });
+    },
+  );
+
+  app.get(
+    "/api/teacher/classes/:id/companion/chats/:chatId",
+    teacherOnly,
+    (req, res) => {
+      res.json({
+        messages: companionChatMessages(
+          store,
+          req.user.id,
+          param(req, "id"),
+          param(req, "chatId"),
+        ),
+      });
+    },
+  );
+
+  app.delete(
+    "/api/teacher/classes/:id/companion/chats/:chatId",
+    teacherOnly,
+    (req, res) => {
+      deleteCompanionChat(
+        store,
+        req.user.id,
+        param(req, "id"),
+        param(req, "chatId"),
+      );
+      res.json(ok);
+    },
+  );
+
+  app.post(
+    "/api/teacher/classes/:id/companion",
+    teacherOnly,
+    asyncRoute(async (req, res) => {
+      res.json(
+        await askCompanion(
+          store,
+          aiService,
+          req.user.id,
+          param(req, "id"),
+          req.body,
+        ),
+      );
+    }),
+  );
 
   app.post(
     "/api/teacher/classes",
@@ -217,6 +288,115 @@ export function registerTeacherRoutes(
     teacherOnly,
     asyncRoute((req, res) => {
       approveIntervention(store, req.user.id, param(req, "id"));
+      res.json(ok);
+    }),
+  );
+  app.get("/api/teacher/classes/:id/sources", teacherOnly, (req, res) => {
+    res.json({ sources: listSources(store, req.user.id, param(req, "id")) });
+  });
+
+  app.post(
+    "/api/teacher/classes/:id/sources/decks",
+    teacherOnly,
+    (req, _res, next) => {
+      requireOwnedClass(store, req.user.id, param(req, "id"));
+      next();
+    },
+    express.raw({
+      type: "application/octet-stream",
+      limit: DOCUMENT_UPLOAD_LIMIT,
+      inflate: false,
+    }),
+    asyncRoute((req, res) => {
+      res
+        .status(201)
+        .json(
+          addDeck(
+            store,
+            req.user.id,
+            param(req, "id"),
+            queryString(req, "name") ?? "",
+            Buffer.isBuffer(req.body) ? req.body : new Uint8Array(),
+          ),
+        );
+    }),
+  );
+
+  app.post(
+    "/api/teacher/classes/:id/sources/links",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      res
+        .status(201)
+        .json(
+          addLink(store, req.user.id, param(req, "id"), req.body, fetchPage),
+        );
+    }),
+  );
+
+  app.get("/api/teacher/classes/:id/presentations", teacherOnly, (req, res) => {
+    res.json({
+      presentations: listPresentations(store, req.user.id, param(req, "id")),
+    });
+  });
+
+  app.post(
+    "/api/teacher/classes/:id/presentations",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      res
+        .status(201)
+        .json(
+          createPresentation(store, req.user.id, param(req, "id"), req.body),
+        );
+    }),
+  );
+
+  app.post(
+    "/api/teacher/classes/:id/presentations/generate",
+    teacherOnly,
+    asyncRoute(async (req, res) => {
+      res
+        .status(201)
+        .json(
+          await generatePresentation(
+            store,
+            req.user.id,
+            param(req, "id"),
+            req.body,
+          ),
+        );
+    }),
+  );
+
+  app.put(
+    "/api/teacher/presentations/:id",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      updatePresentation(store, req.user.id, param(req, "id"), req.body);
+      res.json(ok);
+    }),
+  );
+
+  app.post(
+    "/api/teacher/presentations/:id/publish",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      setPublished(store, req.user.id, param(req, "id"), req.body);
+      res.json(ok);
+    }),
+  );
+
+  app.delete("/api/teacher/presentations/:id", teacherOnly, (req, res) => {
+    deletePresentation(store, req.user.id, param(req, "id"));
+    res.json(ok);
+  });
+
+  app.put(
+    "/api/teacher/flags/:id",
+    teacherOnly,
+    asyncRoute((req, res) => {
+      updateFlagStatus(store, req.user.id, param(req, "id"), req.body);
       res.json(ok);
     }),
   );

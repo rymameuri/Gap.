@@ -4,22 +4,25 @@ import { parseAssistantMarkdown } from "../assistant-format";
 const inlinePattern = /(\*\*[^*\n]+\*\*|`[^`\n]+`|\[S\d+\])/g;
 
 function renderInline(text: string): ReactNode[] {
-  return text.split(inlinePattern).filter(Boolean).map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={index}>{part.slice(1, -1)}</code>;
-    }
-    if (/^\[S\d+\]$/.test(part)) {
-      return (
-        <span className="s-inline-citation" key={index}>
-          {part}
-        </span>
-      );
-    }
-    return <Fragment key={index}>{part}</Fragment>;
-  });
+  return text
+    .split(inlinePattern)
+    .filter(Boolean)
+    .map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={index}>{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith("`") && part.endsWith("`")) {
+        return <code key={index}>{part.slice(1, -1)}</code>;
+      }
+      if (/^\[S\d+\]$/.test(part)) {
+        return (
+          <span className="s-inline-citation" key={index}>
+            {part}
+          </span>
+        );
+      }
+      return <Fragment key={index}>{part}</Fragment>;
+    });
 }
 
 export function AssistantAnswer({ content }: { content: string }) {

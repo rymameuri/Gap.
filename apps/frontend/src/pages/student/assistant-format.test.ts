@@ -22,7 +22,9 @@ test("parses headings, paragraphs, and lists from assistant Markdown", () => {
 });
 
 test("keeps fenced code as a separate block without interpreting its contents", () => {
-  const blocks = parseAssistantMarkdown("```python\nprint('safe')\n```\n\nDone.");
+  const blocks = parseAssistantMarkdown(
+    "```python\nprint('safe')\n```\n\nDone.",
+  );
 
   assert.deepEqual(blocks, [
     { type: "code", text: "print('safe')", language: "python" },

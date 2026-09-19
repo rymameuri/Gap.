@@ -14,6 +14,7 @@ import { Brand, ErrorBox } from "../components/ui";
 import type { Course, StudentInvitation } from "../services/types";
 type ClassCard = Course & {
   join_code?: string;
+  failed?: string[];
   students?: number;
   teacher_name?: string;
 };
@@ -180,6 +181,13 @@ export function ClassDashboard({ role }: { role: "teacher" | "student" }) {
             <div>
               <strong>{created.name} is ready.</strong>
               <p>Share this code with your students to invite them.</p>
+              {!!created.failed?.length && (
+                <p role="alert">
+                  Couldn't save {created.failed.join(", ")}. Add{" "}
+                  {created.failed.length === 1 ? "it" : "them"} again from the
+                  course page.
+                </p>
+              )}
             </div>
             <div className="class-code">
               <KeyRound size={17} />

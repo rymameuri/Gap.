@@ -54,7 +54,7 @@ export function LearningCharts({
                 <Link
                   key={c.tag}
                   to={
-                    "/teacher/gaps?topic=" +
+                    "/teacher/students?tab=gaps&topic=" +
                     encodeURIComponent(c.topic) +
                     "&status=open"
                   }
@@ -166,7 +166,7 @@ export function LearningCharts({
                 <Link
                   key={c.label}
                   to={
-                    "/teacher/gaps?status=" +
+                    "/teacher/students?tab=gaps&status=" +
                     (c.label === "Open"
                       ? "open"
                       : c.label === "Resolved"
