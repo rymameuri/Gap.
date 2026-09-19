@@ -52,6 +52,16 @@ export type Cluster = {
   students: number;
   priority: number;
   struggling: number;
+  priorityExplanation: {
+    method: "exact-shapley";
+    baseline: number;
+    prediction: number;
+    attributions: {
+      feature: "students" | "severity";
+      value: number;
+      contribution: number;
+    }[];
+  };
 };
 export type Course = {
   id: string;
@@ -135,6 +145,24 @@ export type RosterPreview = {
   }[];
   summary: Record<RosterRowStatus, number>;
 };
+export type WorkflowRun = {
+  id: string;
+  kind:
+    "study" | "quiz_draft" | "quiz_submission" | "explanation" | "follow_up";
+  title: string;
+  status: "running" | "awaiting_review" | "complete" | "failed" | "rejected";
+  created_at: string;
+  updated_at: string;
+  steps: {
+    id: string;
+    actor: string;
+    action: string;
+    detail: string;
+    state: "complete" | "pending" | "failed";
+    sources: StudySource[];
+    created_at: string;
+  }[];
+};
 export type TeacherData = {
   classes: Course[];
   course: Course;
@@ -156,6 +184,7 @@ export type TeacherData = {
   asked: { id: string; text: string; student_name: string }[];
   engine: string;
   jobs: { id: string; kind: string; status: string; error?: string }[];
+  workflows: WorkflowRun[];
 };
 export type StudentData = {
   courses: Course[];
