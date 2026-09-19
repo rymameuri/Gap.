@@ -6,6 +6,7 @@ import { coursePath } from "./course-model";
 import { PageHeading, SectionHeading } from "./components/StudentUI";
 import { MaterialReader } from "./components/MaterialReader";
 import { CourseFiles } from "../../components/CourseFiles";
+import { PublishedPresentations } from "./components/PublishedPresentations";
 
 export function StudentMaterials() {
   const { course, gaps } = useCourse();
@@ -55,6 +56,7 @@ export function StudentMaterials() {
           onSelect={setSelected}
         />
       </div>
+      <PublishedPresentations key={course.id} courseId={course.id} />
       <CourseFiles courseId={course.id} />
     </>
   );

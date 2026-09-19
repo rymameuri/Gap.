@@ -54,6 +54,9 @@ export function topicEvidence(
       detail: "Your assessment identified a topic to revisit.",
     };
   }
+  const latestProbe = data.progress
+    .filter((entry) => gapIds.has(entry.gap_id))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const latestGrade = data.grades
     .flatMap((grade) => {
       const quiz = data.quizzes.find((item) => item.id === grade.quiz_id);
@@ -75,21 +78,25 @@ export function topicEvidence(
     })
     .sort((a, b) => b.date.localeCompare(a.date))[0];
   if (latestGrade) {
-    if (!latestGrade.results.every((result) => result.correct))
+    const fullCredit = latestGrade.results.every((result) => result.correct);
+    if (
+      !fullCredit &&
+      (!latestProbe?.correct || latestGrade.date >= latestProbe.created_at)
+    )
       return {
         status: "practice",
         detail: "Review the feedback on your latest quiz.",
       };
-    if (gaps.every((gap) => gap.resolved_by_submission_id === latestGrade.id))
+    if (
+      fullCredit &&
+      gaps.every((gap) => gap.resolved_by_submission_id === latestGrade.id)
+    )
       return {
         status: "independent",
         detail:
           "Full credit on the latest published quiz questions for this topic.",
       };
   }
-  const latestProbe = data.progress
-    .filter((entry) => gapIds.has(entry.gap_id))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   if (latestProbe && !latestProbe.correct)
     return {
       status: "practice",

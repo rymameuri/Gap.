@@ -24,6 +24,7 @@ import {
   createWorkflowRun,
   workflowRunForEntity,
 } from "./workflow-traces.js";
+import { flagIfConcerning } from "./wellbeing.js";
 
 const now = (): string => new Date().toISOString();
 
@@ -225,6 +226,7 @@ export function askQuestion(
       text,
       created_at: now(),
     });
+    flagIfConcerning(store, classId, studentId, "question", text);
     store.event(
       classId,
       "Diagnostic",

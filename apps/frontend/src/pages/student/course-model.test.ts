@@ -173,6 +173,32 @@ test("the latest follow-up result determines whether another review is needed", 
   assert.equal(result.status, "practice");
 });
 
+test("a resolved follow-up supersedes the older failed quiz without claiming independence", () => {
+  const data: StudentData = {
+    ...empty,
+    gaps: [{ ...gap, status: "resolved" }],
+    grades: [{ ...grade, results: [{ ...grade.results[0], score: 0 }] }],
+    progress: [
+      {
+        id: "p1",
+        gap_id: gap.id,
+        topic: gap.topic,
+        correct: 1,
+        created_at: "2026-09-18T11:00:00Z",
+      },
+    ],
+  };
+  assert.equal(
+    topicEvidence("Motion", selectCourse(data, course)).status,
+    "supported",
+  );
+  data.grades[0].created_at = "2026-09-18T12:00:00Z";
+  assert.equal(
+    topicEvidence("Motion", selectCourse(data, course)).status,
+    "practice",
+  );
+});
+
 test("only published full-credit topic results count as independent evidence", () => {
   assert.equal(
     topicEvidence("Motion", selectCourse({ ...empty, grades: [grade] }, course))

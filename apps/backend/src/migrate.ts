@@ -8,6 +8,7 @@ import {
   classInvitations,
   gapResolutions,
   learningRecords,
+  sources,
   workflowTraces,
   type Migration,
 } from "./migrations/index.js";
@@ -178,6 +179,24 @@ export interface MigrationResult {
   readonly applied: readonly string[];
 }
 
+// The two released branches added independent 0007 migrations. Fill only
+// their exact known histories; unknown or damaged ledgers still fail closed.
+function reconcileMergedBranches(store: Store): string[] {
+  const done = appliedMigrations(store);
+  const main = [...MIGRATIONS.slice(0, 6), workflowTraces];
+  const rymedits = MIGRATIONS.filter((item) => item !== workflowTraces);
+  const fromMain = done.join("\n") === main.map((item) => item.id).join("\n");
+  const fromRymedits =
+    done.length > 7 &&
+    done.length <= rymedits.length &&
+    done.every((id, index) => rymedits[index]?.id === id);
+  const missing = fromMain ? sources : fromRymedits ? workflowTraces : null;
+  if (!missing) return [];
+  missing.up(store);
+  record(store, missing.id);
+  return [missing.id];
+}
+
 /**
  * Applies every pending migration, each in its own transaction.
  * @throws MigrationError when the database has migrations this code does not know.
@@ -194,9 +213,11 @@ export function migrate(
     const adopted = adoptLegacySchema(store);
     const early = reconcileEarlyLearningRecords(store);
     const workflow = reconcileEarlyWorkflowTraces(store);
+    const merged =
+      migrations === MIGRATIONS ? reconcileMergedBranches(store) : [];
     return {
       adopted: [...adopted, ...early.adopted, ...workflow.adopted],
-      applied: [...early.applied, ...workflow.applied],
+      applied: [...early.applied, ...workflow.applied, ...merged],
     };
   });
   const done = appliedMigrations(store);

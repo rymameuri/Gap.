@@ -1,3 +1,4 @@
+import type { PageFetcher } from "../src/safe-fetch.js";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { Express } from "express";
@@ -49,6 +50,7 @@ function listeningPort(server: Server): number {
 export async function startTestServer(
   env: Record<string, string> = {},
   aiService?: AIServiceClient | null,
+  fetchPage?: PageFetcher,
 ): Promise<TestServer> {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -68,6 +70,7 @@ export async function startTestServer(
     config,
     logger,
     ...(aiService === undefined ? {} : { aiService }),
+    ...(fetchPage === undefined ? {} : { fetchPage }),
   });
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");

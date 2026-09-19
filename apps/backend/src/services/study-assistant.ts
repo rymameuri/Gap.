@@ -2,6 +2,7 @@ import type {
   AIServiceClient,
   StudyResponse,
 } from "../agents/python-service.js";
+import { flagIfConcerning } from "./wellbeing.js";
 import type { Store } from "../db.js";
 import { AIServiceRequestError } from "../agents/python-service.js";
 import { recordAgentReview } from "./agent-reviews.js";
@@ -39,6 +40,8 @@ export async function askStudyAssistant(
   const history = conversationId
     ? conversationHistory(store, studentId, classId, conversationId)
     : [];
+
+  flagIfConcerning(store, classId, studentId, "assistant", message);
 
   if (!course.syllabus.trim())
     throw new ConflictError(

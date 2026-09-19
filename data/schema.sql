@@ -38,6 +38,25 @@ CREATE TABLE classes(
   material_version INTEGER NOT NULL DEFAULT 1
 , join_code TEXT);
 
+CREATE TABLE companion_chats(
+  id TEXT PRIMARY KEY,
+  class_id TEXT NOT NULL REFERENCES classes(id),
+  teacher_id TEXT NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE companion_messages(
+  id TEXT PRIMARY KEY,
+  class_id TEXT NOT NULL REFERENCES classes(id),
+  teacher_id TEXT NOT NULL REFERENCES users(id),
+  role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+  content TEXT NOT NULL,
+  sources TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+, chat_id TEXT);
+
 CREATE TABLE conversation_messages(
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -136,6 +155,17 @@ CREATE TABLE memberships(
   PRIMARY KEY(class_id,student_id)
 );
 
+CREATE TABLE presentations(
+  id TEXT PRIMARY KEY,
+  class_id TEXT NOT NULL REFERENCES classes(id),
+  title TEXT NOT NULL,
+  slides TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('draft','published')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  published_at TEXT
+);
+
 CREATE TABLE probes(
   id TEXT PRIMARY KEY,
   gap_id TEXT REFERENCES gaps(id),
@@ -171,6 +201,18 @@ CREATE TABLE sessions(
   expires_at INTEGER NOT NULL
 );
 
+CREATE TABLE sources(
+  id TEXT PRIMARY KEY,
+  class_id TEXT NOT NULL REFERENCES classes(id),
+  type TEXT NOT NULL CHECK(type IN ('deck','link')),
+  name TEXT NOT NULL,
+  url TEXT,
+  status TEXT NOT NULL CHECK(status IN ('processing','ready','failed')),
+  error TEXT,
+  content TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE submissions(
   id TEXT PRIMARY KEY,
   quiz_id TEXT REFERENCES quizzes(id),
@@ -192,6 +234,20 @@ CREATE TABLE users(
   email TEXT UNIQUE NOT NULL,
   role TEXT CHECK(role IN ('teacher','student')),
   password TEXT NOT NULL
+);
+
+CREATE TABLE wellbeing_flags(
+  id TEXT PRIMARY KEY,
+  class_id TEXT NOT NULL REFERENCES classes(id),
+  student_id TEXT NOT NULL REFERENCES users(id),
+  source TEXT NOT NULL CHECK(source IN ('question','assistant')),
+  text TEXT NOT NULL,
+  category TEXT NOT NULL,
+  severity TEXT NOT NULL CHECK(severity IN ('urgent','high','medium','low')),
+  status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','reached_out','resolved')),
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 CREATE TABLE workflow_runs(
@@ -227,6 +283,12 @@ CREATE INDEX class_invitations_email ON class_invitations(email,status);
 
 CREATE UNIQUE INDEX classes_join_code ON classes(join_code);
 
+CREATE INDEX companion_chats_owner ON companion_chats(class_id,teacher_id,updated_at);
+
+CREATE INDEX companion_messages_chat ON companion_messages(chat_id);
+
+CREATE INDEX companion_messages_thread ON companion_messages(class_id,teacher_id);
+
 CREATE INDEX conversation_messages_order ON conversation_messages(conversation_id,created_at);
 
 CREATE INDEX conversations_student ON conversations(student_id,class_id,updated_at);
@@ -237,7 +299,15 @@ CREATE INDEX event_class ON events(class_id,created_at);
 
 CREATE INDEX gap_class ON gaps(class_id,status);
 
+CREATE INDEX presentations_class ON presentations(class_id);
+
+CREATE INDEX sources_class ON sources(class_id);
+
+CREATE UNIQUE INDEX sources_class_url ON sources(class_id,url) WHERE url IS NOT NULL;
+
 CREATE INDEX submission_student ON submissions(student_id);
+
+CREATE INDEX wellbeing_flags_class ON wellbeing_flags(class_id,status);
 
 CREATE INDEX workflow_runs_class ON workflow_runs(class_id,created_at DESC);
 

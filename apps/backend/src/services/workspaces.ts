@@ -59,6 +59,7 @@ import {
   classInvitationList,
   type TeacherInvitation,
 } from "../repositories/invitations.js";
+import { classFlags, type TeacherFlagRow } from "../repositories/wellbeing.js";
 import { requireOwnedClass } from "./classes.js";
 import { pendingAgentReviews, type AgentReviewView } from "./agent-reviews.js";
 import { recentWorkflowRuns, type WorkflowRun } from "./workflow-traces.js";
@@ -105,6 +106,7 @@ export interface TeacherWorkspace {
   gaps: TeacherGapRow[];
   roster: RosterEntry[];
   invitations: TeacherInvitation[];
+  flags: TeacherFlagRow[];
   quizzes: TeacherQuizView[];
   reviews: ReviewView[];
   agentReviews: AgentReviewView[];
@@ -142,6 +144,7 @@ export function teacherWorkspace(
     gaps: classGaps(store, course.id),
     roster: classRoster(store, course.id),
     invitations: classInvitationList(store, course.id),
+    flags: classFlags(store, course.id),
     quizzes: classQuizzes(store, course.id).map((row) => ({
       ...row,
       questions: parseQuestions(row.questions),

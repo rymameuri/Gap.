@@ -8,6 +8,7 @@ import {
   stringField,
 } from "../test/openapi.js";
 import { startTestServer, type TestServer } from "../test/support.js";
+import { strToU8, zipSync } from "fflate";
 import { rosterXlsx } from "../test/xlsx.js";
 import type { AIServiceClient } from "./agents/python-service.js";
 
@@ -28,6 +29,7 @@ for (const key of [
 const contract = new Contract();
 
 const TEACHER = "teacher@gap.demo";
+const MISSING_UUID = "00000000-0000-4000-8000-000000000000";
 const SARA = "student@gap.demo";
 const OMAR = "omar@gap.demo";
 const SEED_CLASS = "physics";
@@ -189,7 +191,9 @@ describe("API contract", () => {
   }
 
   before(async () => {
-    app = await startTestServer({}, contractAI);
+    app = await startTestServer({}, contractAI, () =>
+      Promise.resolve({ title: "Forces", text: "Newton's laws." }),
+    );
     teacher = await app.login(TEACHER);
     sara = await app.login(SARA);
     omar = await app.login(OMAR);
@@ -692,6 +696,113 @@ describe("API contract", () => {
     });
   });
 
+  describe("teacher companion", () => {
+    const operation = "POST /api/teacher/classes/{id}/companion";
+    const stub = {
+      extractDocument: () => Promise.reject(new Error("unused")),
+      study: () => Promise.reject(new Error("unused")),
+      modelJSON: () =>
+        Promise.resolve({
+          answer: "Run a small-group session on your top gap.",
+          usedNotes: ["kb-small-group"],
+          usedClassData: true,
+        }),
+    };
+
+    test("answers, cites its sources, and rejects bad requests", async () => {
+      const server = await startTestServer({}, stub);
+      try {
+        const cookie = await server.login(TEACHER);
+        const ask = async (id: string, body: unknown) =>
+          contract.check(
+            operation,
+            await server.request(`/api/teacher/classes/${id}/companion`, {
+              method: "POST",
+              cookie,
+              body,
+            }),
+          );
+        const ok = await ask(SEED_CLASS, {
+          message: "How do I run a small-group intervention?",
+        });
+        const reply = ok as { sources?: { kind: string }[] };
+        assert.deepEqual(reply.sources?.map((s) => s.kind).sort(), [
+          "class",
+          "pedagogy",
+        ]);
+        await ask(SEED_CLASS, { message: "" });
+        await ask(MISSING, { message: "Hello" });
+
+        const base = `/api/teacher/classes/${SEED_CLASS}/companion`;
+        const listOp = "GET /api/teacher/classes/{id}/companion/chats";
+        const chatOp = "GET /api/teacher/classes/{id}/companion/chats/{chatId}";
+        const delOp =
+          "DELETE /api/teacher/classes/{id}/companion/chats/{chatId}";
+        const get = (path: string) => server.request(path, { cookie });
+        const chatId = (ok as { chatId: string }).chatId;
+
+        // A follow-up stays in the same chat; a fresh message starts another.
+        const again = await ask(SEED_CLASS, {
+          message: "And for the whole class?",
+          chatId,
+        });
+        assert.equal((again as { chatId: string }).chatId, chatId);
+        const other = await ask(SEED_CLASS, { message: "Plan a warm-up" });
+        const otherId = (other as { chatId: string }).chatId;
+        assert.notEqual(otherId, chatId);
+        await ask(SEED_CLASS, { message: "Hi", chatId: MISSING_UUID });
+
+        const chats = contract.check(listOp, await get(`${base}/chats`)) as {
+          chats: { id: string }[];
+        };
+        assert.deepEqual(
+          chats.chats.map((c) => c.id),
+          [otherId, chatId],
+        );
+        contract.check(
+          listOp,
+          await get(`/api/teacher/classes/${MISSING}/companion/chats`),
+        );
+        const saved = contract.check(
+          chatOp,
+          await get(`${base}/chats/${chatId}`),
+        ) as { messages: { role: string }[] };
+        assert.deepEqual(
+          saved.messages.map((m) => m.role),
+          ["user", "assistant", "user", "assistant"],
+        );
+        contract.check(chatOp, await get(`${base}/chats/${MISSING_UUID}`));
+        const del = (path: string) =>
+          server.request(path, { method: "DELETE", cookie });
+        contract.check(delOp, await del(`${base}/chats/${otherId}`));
+        contract.check(delOp, await del(`${base}/chats/${otherId}`));
+        const left = contract.check(listOp, await get(`${base}/chats`)) as {
+          chats: unknown[];
+        };
+        assert.equal(left.chats.length, 1);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test("documents an unavailable AI sidecar", async () => {
+      const server = await startTestServer({}, null);
+      try {
+        const cookie = await server.login(TEACHER);
+        contract.check(
+          operation,
+          await server.request(`/api/teacher/classes/${SEED_CLASS}/companion`, {
+            method: "POST",
+            cookie,
+            body: { message: "Hello" },
+          }),
+        );
+      } finally {
+        await server.close();
+      }
+    });
+  });
+
   describe("saved conversations and AI review", () => {
     test("lists, reads, and deletes student-owned conversations", async () => {
       const asked = await call(
@@ -1113,6 +1224,203 @@ describe("API contract", () => {
           body: bodyFor(operation.method),
         });
       }
+    });
+  });
+  describe("sources, presentations and wellbeing flags", () => {
+    const classPath = `/api/teacher/classes/${SEED_CLASS}`;
+    const deck = Buffer.from(
+      zipSync({
+        "ppt/slides/slide1.xml": strToU8(
+          "<p:sld><a:t>Forces and motion</a:t></p:sld>",
+        ),
+      }),
+    );
+    const slides = [
+      {
+        title: "Intro",
+        bullets: ["Force", "Mass"],
+        notes: "Private teacher notes",
+      },
+    ];
+
+    test("sources", async () => {
+      const op = "POST /api/teacher/classes/{id}/sources/decks";
+      await binaryCall(
+        op,
+        `${classPath}/sources/decks?name=forces.pptx`,
+        teacher,
+        deck,
+      );
+      await binaryCall(
+        op,
+        `${classPath}/sources/decks?name=forces.txt`,
+        teacher,
+        Buffer.from("x"),
+      );
+      await binaryCall(
+        op,
+        `/api/teacher/classes/${MISSING}/sources/decks?name=forces.pptx`,
+        teacher,
+        deck,
+      );
+      const link = "POST /api/teacher/classes/{id}/sources/links";
+      await call(link, `${classPath}/sources/links`, {
+        cookie: teacher,
+        body: { url: "https://example.com/forces" },
+      });
+      await call(link, `${classPath}/sources/links`, {
+        cookie: teacher,
+        body: { url: "https://example.com/forces" },
+      });
+      await call(link, `${classPath}/sources/links`, {
+        cookie: teacher,
+        body: { url: "ftp://example.com" },
+      });
+      await call(link, `/api/teacher/classes/${MISSING}/sources/links`, {
+        cookie: teacher,
+        body: { url: "https://example.com/other" },
+      });
+      const listSources = "GET /api/teacher/classes/{id}/sources";
+      const listed = await call(listSources, `${classPath}/sources`, {
+        cookie: teacher,
+      });
+      assert.equal(list(listed, "sources").length, 2);
+      await call(listSources, `/api/teacher/classes/${MISSING}/sources`, {
+        cookie: teacher,
+      });
+    });
+
+    test("presentations from draft to students", async () => {
+      const create = "POST /api/teacher/classes/{id}/presentations";
+      const created = await call(create, `${classPath}/presentations`, {
+        cookie: teacher,
+        body: { title: "Forces", slides },
+      });
+      const id = stringField(created, "id");
+      await call(create, `${classPath}/presentations`, {
+        cookie: teacher,
+        body: { title: "", slides: [] },
+      });
+      await call(create, `/api/teacher/classes/${MISSING}/presentations`, {
+        cookie: teacher,
+        body: { title: "Forces", slides },
+      });
+      const listOp = "GET /api/teacher/classes/{id}/presentations";
+      assert.equal(
+        list(
+          await call(listOp, `${classPath}/presentations`, {
+            cookie: teacher,
+          }),
+          "presentations",
+        ).length,
+        1,
+      );
+      await call(listOp, `/api/teacher/classes/${MISSING}/presentations`, {
+        cookie: teacher,
+      });
+
+      const studentOp = "GET /api/student/classes/{id}/presentations";
+      const studentPath = `/api/student/classes/${SEED_CLASS}/presentations`;
+      assert.equal(
+        list(
+          await call(studentOp, studentPath, { cookie: sara }),
+          "presentations",
+        ).length,
+        0,
+        "drafts stay hidden",
+      );
+      await call(studentOp, "/api/student/classes/missing/presentations", {
+        cookie: sara,
+      });
+
+      const put = "PUT /api/teacher/presentations/{id}";
+      await call(put, `/api/teacher/presentations/${id}`, {
+        cookie: teacher,
+        body: { title: "Forces 2", slides },
+      });
+      await call(put, `/api/teacher/presentations/${id}`, {
+        cookie: teacher,
+        body: { title: "", slides },
+      });
+      await call(put, `/api/teacher/presentations/${MISSING}`, {
+        cookie: teacher,
+        body: { title: "Forces", slides },
+      });
+
+      const publish = "POST /api/teacher/presentations/{id}/publish";
+      await call(publish, `/api/teacher/presentations/${id}/publish`, {
+        cookie: teacher,
+        body: { published: true },
+      });
+      const published = await call(studentOp, studentPath, { cookie: sara });
+      assert.ok(!JSON.stringify(published).includes("Private teacher notes"));
+      await call(publish, `/api/teacher/presentations/${id}/publish`, {
+        cookie: teacher,
+        body: { published: "yes" },
+      });
+      await call(publish, `/api/teacher/presentations/${MISSING}/publish`, {
+        cookie: teacher,
+        body: { published: true },
+      });
+      assert.equal(
+        list(
+          await call(studentOp, studentPath, { cookie: sara }),
+          "presentations",
+        ).length,
+        1,
+      );
+
+      const del = "DELETE /api/teacher/presentations/{id}";
+      await call(del, `/api/teacher/presentations/${id}`, {
+        cookie: teacher,
+      });
+      await call(del, `/api/teacher/presentations/${MISSING}`, {
+        cookie: teacher,
+      });
+    });
+
+    test("generating a deck", async () => {
+      const op = "POST /api/teacher/classes/{id}/presentations/generate";
+      const made = await call(op, `${classPath}/presentations/generate`, {
+        cookie: teacher,
+        body: { title: "Forces", focus: "Newton's laws" },
+      });
+      assert.ok(list(made, "slides").length > 1);
+      await call(op, `${classPath}/presentations/generate`, {
+        cookie: teacher,
+        body: { title: "" },
+      });
+      await call(op, `/api/teacher/classes/${MISSING}/presentations/generate`, {
+        cookie: teacher,
+        body: { title: "Forces" },
+      });
+    });
+
+    test("a worrying question raises a flag the teacher can follow up", async () => {
+      await call("POST /api/student/questions", "/api/student/questions", {
+        cookie: sara,
+        body: { classId: SEED_CLASS, text: "i don't want to live anymore" },
+      });
+      const workspace = await teacherWorkspace();
+      const flags = list<{ id: string; student_name: string }>(
+        workspace,
+        "flags",
+      );
+      assert.equal(flags.length, 1);
+      const id = flags[0]?.id ?? "";
+      const op = "PUT /api/teacher/flags/{id}";
+      await call(op, `/api/teacher/flags/${id}`, {
+        cookie: teacher,
+        body: { status: "reached_out", note: "Spoke after class." },
+      });
+      await call(op, `/api/teacher/flags/${id}`, {
+        cookie: teacher,
+        body: { status: "nonsense" },
+      });
+      await call(op, `/api/teacher/flags/${MISSING}`, {
+        cookie: teacher,
+        body: { status: "resolved" },
+      });
     });
   });
 });

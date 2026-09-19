@@ -8,19 +8,20 @@ import {
   Link,
 } from "react-router-dom";
 import {
+  Copy,
   LayoutDashboard,
   ClipboardList,
-  BookOpen,
   FileText,
-  Activity,
   LogOut,
   Users,
-  Layers,
+  Settings,
+  Sparkles,
+  Activity,
 } from "lucide-react";
 import { api, ApiError } from "../services/api";
 import { useSession } from "../services/session";
 import type { TeacherData, StudentData } from "../services/types";
-import { Brand, ErrorBox, EngineNote } from "../components/ui";
+import { Brand, ErrorBox, EngineNote, useNotice } from "../components/ui";
 export type TeacherContext = {
   data: TeacherData;
   refresh: () => Promise<void>;
@@ -59,7 +60,8 @@ export function useWorkspace<T>(path: string) {
 }
 export function TeacherLayout() {
   const { user, logout } = useSession(),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    notice = useNotice();
   const [params, setParams] = useSearchParams();
   const classId = params.get("classId") || "";
   const setClassId = (id: string) => setParams({ classId: id });
@@ -68,30 +70,29 @@ export function TeacherLayout() {
       (classId ? "?classId=" + encodeURIComponent(classId) : ""),
   );
   const links = [
-    ["overview", "Overview", LayoutDashboard],
-    ["students", "Students", Users],
-    ["gaps", "Learning gaps", Layers],
+    ["overview", "Home", LayoutDashboard],
+    ["materials", "Materials", FileText],
     ["assessments", "Assessments", ClipboardList],
-    ["review", "Review queue", BookOpen],
-    ["content", "Targeted support", FileText],
-    ["materials", "Class materials", FileText],
+    ["students", "Students", Users],
+    ["companion", "Teaching companion", Sparkles],
     ["activity", "Agent activity", Activity],
+    ["settings", "Settings", Settings],
   ] as const;
   return (
     <div className="shell">
       <aside>
         <Brand />
+        <Link className="all-classes-link" to="/teacher/">
+          ← All classes
+        </Link>
         <div className="eyebrow" style={{ marginBottom: 12 }}>
           TEACHER WORKSPACE
         </div>
-        <Link className="navitem" to="/teacher/">
-          ← All classes
-        </Link>
         <nav>
           {links.map(([path, label, Icon]) => (
             <NavLink
               key={path}
-              end={!path}
+              end={false}
               to={"/teacher/" + path + (classId ? "?classId=" + classId : "")}
               className={({ isActive }) =>
                 "navitem " + (isActive ? "active" : "")
@@ -99,9 +100,13 @@ export function TeacherLayout() {
             >
               <Icon size={16} />
               {label}
-              {path === "review" && !!data?.reviews.length && (
-                <span className="badge">{data.reviews.length}</span>
-              )}
+              {path === "assessments" &&
+                data &&
+                data.reviews.length + data.agentReviews.length > 0 && (
+                  <span className="badge">
+                    {data.reviews.length + data.agentReviews.length}
+                  </span>
+                )}
             </NavLink>
           ))}
         </nav>
@@ -144,12 +149,19 @@ export function TeacherLayout() {
           </div>
           <div className="workspaceidentity">
             {data?.course?.join_code && (
-              <span
+              <button
+                type="button"
                 className="class-code-small"
-                title="Share this code with your students"
+                title="Copy the class code to share with students"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(data.course.join_code ?? "")
+                    .then(() => notice("Class code copied."));
+                }}
               >
                 Class code: <code>{data.course.join_code}</code>
-              </span>
+                <Copy size={13} />
+              </button>
             )}
             <span className="avatar">T</span>Teacher workspace
           </div>

@@ -1,3 +1,4 @@
+import { QuizPreview } from "../../components/QuizPreview";
 import { MaterialFileImport } from "../../components/MaterialFileImport";
 import { PriorityRationale } from "./PriorityRationale";
 import { WorkflowTimeline } from "./WorkflowTimeline";
@@ -11,6 +12,9 @@ import {
   ArrowUpRight,
   MessageSquare,
   ArrowRight,
+  Eye,
+  ListChecks,
+  Pencil,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ClassLink as Link } from "../../components/ClassLink";
@@ -28,7 +32,7 @@ import { SpeechInputButton } from "../../components/SpeechInputButton";
 import { appendSpeechTranscript } from "../../components/speech-recognition";
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "The action could not be completed.";
-function useAction() {
+export function useAction() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     notice = useNotice();
@@ -312,13 +316,14 @@ export function Overview() {
     </div>
   );
 }
-export function Assessments() {
+export function Assessments({ embedded = false }: { embedded?: boolean }) {
   const { data, refresh } = useTeacher(),
     action = useAction();
   const [topic, setTopic] = useState(
       data.course.id === "physics" ? "Force and motion" : "",
     ),
-    [draft, setDraft] = useState<Quiz | null>(null);
+    [draft, setDraft] = useState<Quiz | null>(null),
+    [preview, setPreview] = useState<Quiz | null>(null);
   useEffect(() => {
     setTopic(data.course.id === "physics" ? "Force and motion" : "");
     setDraft(null);
@@ -368,11 +373,13 @@ export function Assessments() {
   }
   return (
     <>
-      <Title
-        label="ASSESSMENT"
-        heading="Assessments"
-        description="Choose a course topic, then review every question before publishing."
-      />
+      {!embedded && (
+        <Title
+          label="ASSESSMENT"
+          heading="Assessments"
+          description="Choose a course topic, then review every question before publishing."
+        />
+      )}
       {action.error && <ErrorBox message={action.error} />}
       <section className="panel">
         {data.engine === "local" && (
@@ -422,8 +429,8 @@ export function Assessments() {
       <section className="panel">
         <h2>Your assessments</h2>
         {data.quizzes.map((q) => (
-          <div className="gap" key={q.id}>
-            <div>
+          <div className="quiz-row" key={q.id}>
+            <div className="quiz-row-info">
               <Badge status={q.status} />
               <h3>{q.title}</h3>
               <span className="muted">
@@ -431,21 +438,29 @@ export function Assessments() {
                 {q.engine === "local" ? "Local teaching bank" : "Live AI"}
               </span>
             </div>
-            {q.status === "draft" ? (
-              <button
-                className="btn"
-                onClick={() => setDraft(structuredClone(q))}
-              >
-                Review draft
+            <div className="quiz-row-actions">
+              <button className="btn small" onClick={() => setPreview(q)}>
+                <Eye size={15} /> View as student
               </button>
-            ) : (
-              <Link className="btn" to="/teacher/review">
-                View review queue
-              </Link>
-            )}
+              {q.status === "draft" ? (
+                <button
+                  className="btn small primary"
+                  onClick={() => setDraft(structuredClone(q))}
+                >
+                  <Pencil size={15} /> Review draft
+                </button>
+              ) : (
+                <Link className="btn small" to="/teacher/review">
+                  <ListChecks size={15} /> View review queue
+                </Link>
+              )}
+            </div>
           </div>
         ))}
       </section>
+      {preview && (
+        <QuizPreview quiz={preview} onClose={() => setPreview(null)} />
+      )}
       {draft && (
         <section className="panel">
           <h2>Review and edit</h2>
@@ -669,15 +684,17 @@ function ReviewCard({ review }: { review: Review }) {
     </section>
   );
 }
-export function ReviewQueue() {
+export function ReviewQueue({ embedded = false }: { embedded?: boolean }) {
   const { data } = useTeacher();
   return (
     <>
-      <Title
-        label="TEACHER REVIEW"
-        heading="Work for review"
-        description="Check uncertain grades and Study Assistant responses before students see them."
-      />
+      {!embedded && (
+        <Title
+          label="TEACHER REVIEW"
+          heading="Work for review"
+          description="Check uncertain grades and Study Assistant responses before students see them."
+        />
+      )}
       {data.agentReviews.map((review) => (
         <AgentReviewCard key={review.id} review={review} />
       ))}
@@ -758,7 +775,7 @@ function AgentReviewCard({ review }: { review: AgentReview }) {
     </section>
   );
 }
-export function ContentStudio() {
+export function ContentStudio({ embedded = false }: { embedded?: boolean }) {
   const { data, refresh } = useTeacher(),
     action = useAction();
   const [selected, setSelected] = useState<Intervention | null>(null),
@@ -786,11 +803,13 @@ export function ContentStudio() {
   }
   return (
     <>
-      <Title
-        label="CONTENT STUDIO"
-        heading="Explanations and follow-ups"
-        description="Approve focused explanations and follow-up questions before students receive them."
-      />
+      {!embedded && (
+        <Title
+          label="CONTENT STUDIO"
+          heading="Explanations and follow-ups"
+          description="Approve focused explanations and follow-up questions before students receive them."
+        />
+      )}
       {action.error && <ErrorBox message={action.error} />}
       <div className="content-grid">
         <div>
@@ -896,7 +915,7 @@ export function ContentStudio() {
     </>
   );
 }
-export function Materials() {
+export function Materials({ embedded = false }: { embedded?: boolean }) {
   const { data, refresh } = useTeacher();
   const action = useAction();
   const [name, setName] = useState(data.course.name),
@@ -911,11 +930,13 @@ export function Materials() {
   }, [data.course.id]);
   return (
     <>
-      <Title
-        label="COURSE SOURCES"
-        heading="Class materials"
-        description="Keep the syllabus used by AI and the files shared with students up to date."
-      />
+      {!embedded && (
+        <Title
+          label="COURSE SOURCES"
+          heading="Class materials"
+          description="Keep the syllabus used by AI and the files shared with students up to date."
+        />
+      )}
       {action.error && <ErrorBox message={action.error} />}
       <section className="material-section" aria-labelledby="syllabus-heading">
         <div className="material-section-heading">
@@ -983,38 +1004,40 @@ export function Materials() {
         </form>
       </section>
       <CourseFiles courseId={data.course.id} canManage />
-      <details className="course-settings">
-        <summary>Course settings</summary>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!nameChanged) return;
-            void action.run(async () => {
-              await put("/teacher/classes/" + data.course.id, {
-                name: name.trim(),
-                syllabus: data.course.syllabus,
-              });
-              await refresh();
-            }, "Course name updated.");
-          }}
-        >
-          <label className="field" htmlFor="course-name">
-            Course name
-          </label>
-          <div className="course-name-row">
-            <input
-              id="course-name"
-              required
-              minLength={3}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <button className="btn" disabled={action.busy || !nameChanged}>
-              Save name
-            </button>
-          </div>
-        </form>
-      </details>
+      {!embedded && (
+        <details className="course-settings">
+          <summary>Course settings</summary>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!nameChanged) return;
+              void action.run(async () => {
+                await put("/teacher/classes/" + data.course.id, {
+                  name: name.trim(),
+                  syllabus: data.course.syllabus,
+                });
+                await refresh();
+              }, "Course name updated.");
+            }}
+          >
+            <label className="field" htmlFor="course-name">
+              Course name
+            </label>
+            <div className="course-name-row">
+              <input
+                id="course-name"
+                required
+                minLength={3}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <button className="btn" disabled={action.busy || !nameChanged}>
+                Save name
+              </button>
+            </div>
+          </form>
+        </details>
+      )}
     </>
   );
 }

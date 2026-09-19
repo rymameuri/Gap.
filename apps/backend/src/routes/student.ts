@@ -10,6 +10,7 @@ import {
 } from "../services/invitations.js";
 import { askQuestion, recheckGap } from "../services/learning.js";
 import { studentWorkspace } from "../services/workspaces.js";
+import { publishedPresentations } from "../services/presentations.js";
 import { askStudyAssistant } from "../services/study-assistant.js";
 import {
   deleteConversation,
@@ -70,6 +71,16 @@ export function registerStudentRoutes(
   app.delete("/api/student/conversations/:id", studentOnly, (req, res) => {
     deleteConversation(store, req.user.id, param(req, "id"));
     res.json({ ok: true });
+  });
+
+  app.get("/api/student/classes/:id/presentations", studentOnly, (req, res) => {
+    res.json({
+      presentations: publishedPresentations(
+        store,
+        req.user.id,
+        param(req, "id"),
+      ),
+    });
   });
 
   app.post(

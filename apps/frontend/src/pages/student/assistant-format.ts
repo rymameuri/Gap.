@@ -2,7 +2,7 @@ export type AssistantBlock =
   | { type: "heading"; level: 1 | 2 | 3; text: string }
   | { type: "paragraph"; text: string }
   | { type: "unordered-list"; items: string[] }
-  | { type: "ordered-list"; items: string[] }
+  | { type: "ordered-list"; items: string[]; start: number }
   | { type: "code"; text: string; language: string }
   | { type: "rule" };
 
@@ -89,7 +89,11 @@ export function parseAssistantMarkdown(content: string): AssistantBlock[] {
         items.push(match[1].trim());
         index += 1;
       }
-      blocks.push({ type: "ordered-list", items });
+      blocks.push({
+        type: "ordered-list",
+        items,
+        start: parseInt(ordered[0], 10),
+      });
       continue;
     }
 

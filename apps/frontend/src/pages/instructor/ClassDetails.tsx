@@ -165,11 +165,6 @@ export function Students() {
   );
   return (
     <>
-      <Title
-        label="CLASS ROSTER"
-        heading="Students"
-        description="Class members, learning gaps, and participation."
-      />
       <EnrollmentTools />
       <div className="detail-toolbar">
         <label htmlFor="roster-search">Find a student</label>
@@ -216,7 +211,7 @@ export function Students() {
                   <td>
                     <Link
                       className="btn small"
-                      to={"/teacher/gaps?student=" + s.id}
+                      to={"/teacher/students?tab=gaps&student=" + s.id}
                     >
                       View learning gaps
                     </Link>
@@ -256,11 +251,7 @@ export function GapDetails() {
   }
   return (
     <>
-      <Title
-        label="LEARNING RECORDS"
-        heading={topic || "Learning gaps"}
-        description="Individual student outcomes, backed by assessment and recheck records."
-      />
+      {topic && <h2>{topic}</h2>}
       <div className="detail-toolbar">
         <label htmlFor="gap-status">Status</label>
         <select
@@ -275,7 +266,7 @@ export function GapDetails() {
         </select>
         <span className="muted">{rows.length} records</span>
         {(topic || student) && (
-          <Link className="btn small" to="/teacher/gaps">
+          <Link className="btn small" to="/teacher/students?tab=gaps">
             Clear filters
           </Link>
         )}
@@ -296,7 +287,11 @@ export function GapDetails() {
               {rows.map((g) => (
                 <tr key={g.id}>
                   <td>
-                    <Link to={"/teacher/students?student=" + g.student_id}>
+                    <Link
+                      to={
+                        "/teacher/students?tab=roster&student=" + g.student_id
+                      }
+                    >
                       {g.student_name}
                     </Link>
                   </td>

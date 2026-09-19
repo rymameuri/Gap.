@@ -266,7 +266,7 @@ test("adopts the early learning-records migration without losing existing data",
     applied: [
       "0004-gap-resolutions",
       "0006-class-invitations",
-      "0007-workflow-traces",
+      ...IDS.slice(6),
     ],
   });
   assert.deepEqual(appliedMigrations(store), IDS);
@@ -292,7 +292,10 @@ test("adopts early workflow traces after installing class invitations", async ()
   );
   assert.deepEqual(migrate(store), {
     adopted: ["0007-workflow-traces"],
-    applied: ["0006-class-invitations"],
+    applied: [
+      "0006-class-invitations",
+      ...IDS.slice(6).filter((id) => id !== workflowTraces.id),
+    ],
   });
   assert.deepEqual(appliedMigrations(store), IDS);
   assert.equal(
@@ -315,6 +318,37 @@ test("adopts early workflow traces after installing class invitations", async ()
 });
 
 describe("persistence", () => {
+  for (const branch of ["main", "rymedits"] as const)
+    test(`upgrades the released ${branch} schema without losing data`, async () => {
+      const store = await blank();
+      const released =
+        branch === "main"
+          ? [...MIGRATIONS.slice(0, 6), workflowTraces]
+          : MIGRATIONS.filter((item) => item !== workflowTraces);
+      migrate(store, released);
+      seed(store, "demo-password");
+      if (branch === "main")
+        store.run(
+          "INSERT INTO workflow_runs(id,class_id,kind,title,status,created_at,updated_at) VALUES('retained-run','physics','study','Retained run','complete','2026-09-19','2026-09-19')",
+        );
+      else
+        store.run(
+          "INSERT INTO sources(id,class_id,type,name,status,content,created_at) VALUES('retained-source','physics','deck','Retained source','ready','Course text','2026-09-19')",
+        );
+      migrate(store);
+      assert.deepEqual(appliedMigrations(store), IDS);
+      assert.ok(store.one("SELECT 1 FROM classes WHERE id='physics'"));
+      assert.ok(
+        store.one(
+          branch === "main"
+            ? "SELECT 1 FROM workflow_runs WHERE id='retained-run'"
+            : "SELECT 1 FROM sources WHERE id='retained-source'",
+        ),
+      );
+      assert.deepEqual(migrate(store), { adopted: [], applied: [] });
+      store.db.close();
+    });
+
   test("a migrated file database reopens without re-running migrations", async () => {
     const directory = await mkdtemp(join(tmpdir(), "migrate-"));
     try {
