@@ -346,6 +346,97 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/teacher/classes/{id}/roster/preview:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: filename
+        in: query
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    post:
+      operationId: previewRoster
+      tags: [teacher]
+      description: Read an Excel (.xlsx, first worksheet) or CSV roster and report what inviting each row would do. The first row is a header with an Email column and either a Name column or First name and Last name columns. At most 1000 students and 2 MiB. Nothing is saved; confirm with the invitations endpoint.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: One entry per data row, in file order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RosterPreview" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413":
+          description: Uploaded file is larger than 2 MiB.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+
+  /api/teacher/classes/{id}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: inviteStudents
+      tags: [teacher]
+      description: Invite students by email. Students already enrolled or with a pending invitation are skipped; declined and revoked invitations are reopened. Invitations wait for students who do not have an account yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [students]
+              properties:
+                students:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required: [email]
+                    properties:
+                      email: { type: string, maxLength: 200 }
+                      name: { type: string, maxLength: 150 }
+      responses:
+        "200":
+          description: Invitations created.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [invited, skipped]
+                properties:
+                  invited: { type: integer, minimum: 0 }
+                  skipped: { type: integer, minimum: 0 }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/teacher/invitations/{id}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: revokeInvitation
+      tags: [teacher]
+      responses:
+        "200":
+          description: Invitation withdrawn. Inviting the student again reopens it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /api/teacher/classes/{id}/assessments:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -582,6 +673,66 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/student/invitations:
+    get:
+      operationId: listStudentInvitations
+      tags: [student]
+      responses:
+        "200":
+          description: Pending invitations addressed to the student's email, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [invitations]
+                properties:
+                  invitations:
+                    type: array
+                    items: { $ref: "#/components/schemas/StudentInvitation" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/student/invitations/{id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: acceptInvitation
+      tags: [student]
+      responses:
+        "200":
+          description: Enrolled in the class.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [id, name]
+                properties:
+                  id: { type: string, description: Class id. }
+                  name: { type: string }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/student/invitations/{id}/decline:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: declineInvitation
+      tags: [student]
+      responses:
+        "200":
+          description: Invitation declined. The teacher sees it as declined.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /api/student/workspace:
     get:
@@ -1158,6 +1309,68 @@ components:
         open_gaps: { type: integer, minimum: 0 }
         activity: { type: integer, minimum: 0 }
 
+    TeacherInvitation:
+      type: object
+      additionalProperties: false
+      required: [id, email, name, status, created_at, responded_at]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string, description: Empty when the roster had no name. }
+        status: { enum: [pending, declined] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        responded_at: { type: [string, "null"] }
+
+    StudentInvitation:
+      type: object
+      additionalProperties: false
+      required: [id, class_id, class_name, teacher_name, created_at]
+      properties:
+        id: { type: string }
+        class_id: { type: string }
+        class_name: { type: string }
+        teacher_name: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    RosterPreview:
+      type: object
+      additionalProperties: false
+      required: [rows, summary]
+      properties:
+        rows:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            additionalProperties: false
+            required: [row, name, email, status, hasAccount]
+            properties:
+              row:
+                {
+                  type: integer,
+                  minimum: 2,
+                  description: Row number in the file.,
+                }
+              name: { type: string }
+              email: { type: string }
+              status:
+                description: new is invited on confirm; invited, enrolled, duplicate and invalid are skipped.
+                enum: [new, invited, enrolled, duplicate, invalid]
+              hasAccount:
+                description: A student account with this email exists and can accept now.
+                type: boolean
+              message: { type: string }
+        summary:
+          type: object
+          additionalProperties: false
+          required: [new, invited, enrolled, duplicate, invalid]
+          properties:
+            new: { type: integer, minimum: 0 }
+            invited: { type: integer, minimum: 0 }
+            enrolled: { type: integer, minimum: 0 }
+            duplicate: { type: integer, minimum: 0 }
+            invalid: { type: integer, minimum: 0 }
+
     TeacherQuiz:
       type: object
       required:
@@ -1289,6 +1502,7 @@ components:
           clusters,
           gaps,
           roster,
+          invitations,
           quizzes,
           reviews,
           agentReviews,
@@ -1311,6 +1525,9 @@ components:
         roster:
           type: array
           items: { $ref: "#/components/schemas/RosterEntry" }
+        invitations:
+          type: array
+          items: { $ref: "#/components/schemas/TeacherInvitation" }
         quizzes:
           type: array
           items: { $ref: "#/components/schemas/TeacherQuiz" }

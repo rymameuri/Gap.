@@ -29,7 +29,7 @@ export interface TestServer {
     init?: {
       method?: string;
       body?: unknown;
-      rawBody?: string;
+      rawBody?: string | Uint8Array;
       cookie?: string;
       headers?: Record<string, string>;
     },
@@ -84,8 +84,13 @@ export async function startTestServer(
       method: init.method ?? "GET",
       headers,
       body:
-        init.rawBody ??
-        (init.body === undefined ? null : JSON.stringify(init.body)),
+        typeof init.rawBody === "string"
+          ? init.rawBody
+          : init.rawBody !== undefined
+            ? new Uint8Array(init.rawBody)
+            : init.body === undefined
+              ? null
+              : JSON.stringify(init.body),
     });
     const text = await response.text();
     return {
