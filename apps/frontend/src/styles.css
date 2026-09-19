@@ -314,6 +314,81 @@ label.field {
   color: #555;
   margin: 20px 0 7px;
 }
+.voice-field {
+  position: relative;
+}
+.voice-field > :is(input, textarea) {
+  padding-right: 54px;
+}
+.voice-field > .speech-input {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+}
+.speech-input {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+}
+.speech-input-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #d5d5db;
+  border-radius: 50%;
+  color: #555b66;
+  background: #fff;
+  transition:
+    background 0.16s,
+    border-color 0.16s,
+    color 0.16s,
+    box-shadow 0.16s;
+}
+.speech-input-button:hover:not(:disabled) {
+  color: #333a74;
+  border-color: #a79ab4;
+  background: #f2eef6;
+}
+.speech-input-button.is-listening {
+  color: #9b2c2c;
+  border-color: #dda7a7;
+  background: #fff0ef;
+  box-shadow: 0 0 0 5px #c33b3b14;
+  animation: speech-listening-pulse 1.5s ease-in-out infinite;
+}
+.speech-input-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.speech-input-status {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(260px, 70vw);
+  padding: 7px 9px;
+  border: 1px solid #dedee4;
+  border-radius: 6px;
+  color: #4f5158;
+  background: #fff;
+  box-shadow: 0 5px 18px #1f213014;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.speech-input-status.is-error {
+  color: #8e2f29;
+  border-color: #efc7c3;
+  background: #fff5f3;
+}
+@keyframes speech-listening-pulse {
+  50% {
+    box-shadow: 0 0 0 9px #c33b3b0a;
+  }
+}
 .actions {
   display: flex;
   gap: 10px;
@@ -1921,6 +1996,9 @@ select:focus-visible {
   }
   .overview-metric:hover {
     transform: none;
+  }
+  .speech-input-button.is-listening {
+    animation: none;
   }
 }
 

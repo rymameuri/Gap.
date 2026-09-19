@@ -19,6 +19,8 @@ import type {
   Intervention,
   Review,
 } from "../../services/types";
+import { SpeechInputButton } from "../../components/SpeechInputButton";
+import { appendSpeechTranscript } from "../../components/speech-recognition";
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "The action could not be completed.";
 function useAction() {
@@ -362,12 +364,23 @@ export function Assessments() {
         <label className="field" htmlFor="topic">
           Topic
         </label>
-        <input
-          id="topic"
-          list="topics"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-        />
+        <div className="voice-field">
+          <input
+            id="topic"
+            list="topics"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          />
+          <SpeechInputButton
+            label="Dictate the assessment topic"
+            disabled={action.busy}
+            onTranscript={(transcript) =>
+              setTopic((currentTopic) =>
+                appendSpeechTranscript(currentTopic, transcript),
+              )
+            }
+          />
+        </div>
         <datalist id="topics">
           {["Force and motion", "Energy and work", "Electric circuits"].map(
             (t) => (
@@ -573,11 +586,22 @@ function ReviewCard({ review }: { review: Review }) {
           <label className="field" htmlFor={"feedback-" + review.id}>
             Feedback to student
           </label>
-          <textarea
-            id={"feedback-" + review.id}
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-          />
+          <div className="voice-field">
+            <textarea
+              id={"feedback-" + review.id}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+            />
+            <SpeechInputButton
+              label="Dictate feedback to the student"
+              disabled={action.busy}
+              onTranscript={(transcript) =>
+                setFeedback((currentFeedback) =>
+                  appendSpeechTranscript(currentFeedback, transcript),
+                )
+              }
+            />
+          </div>
         </div>
       </div>
       {action.error && <ErrorBox message={action.error} />}
@@ -699,13 +723,26 @@ export function ContentStudio() {
               <label className="field" htmlFor="explainer-content">
                 Explanation
               </label>
-              <textarea
-                id="explainer-content"
-                style={{ minHeight: 240 }}
-                readOnly={selected.status !== "draft"}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
+              <div className="voice-field">
+                <textarea
+                  id="explainer-content"
+                  style={{ minHeight: 240 }}
+                  readOnly={selected.status !== "draft"}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                />
+                {selected.status === "draft" && (
+                  <SpeechInputButton
+                    label="Dictate changes to the explanation"
+                    disabled={action.busy}
+                    onTranscript={(transcript) =>
+                      setContent((currentContent) =>
+                        appendSpeechTranscript(currentContent, transcript),
+                      )
+                    }
+                  />
+                )}
+              </div>
               <h3 style={{ marginTop: 25 }}>Follow-up question</h3>
               <p>{selected.probe.prompt}</p>
               {selected.probe.options.map((o) => (
