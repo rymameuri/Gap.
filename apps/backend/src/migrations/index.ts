@@ -5,6 +5,7 @@ import { gapResolutions } from "./0004-gap-resolutions.js";
 import { learningRecords } from "./0005-learning-records.js";
 import { classInvitations } from "./0006-class-invitations.js";
 import { workflowTraces } from "./0007-workflow-traces.js";
+import { courseFileIndex } from "./0008-course-file-index.js";
 import type { Migration } from "./migration.js";
 
 export type { Migration };
@@ -16,6 +17,7 @@ export {
   learningRecords,
   classInvitations,
   workflowTraces,
+  courseFileIndex,
 };
 
 /** Every migration in the order it is applied. Append only. */
@@ -27,4 +29,5 @@ export const MIGRATIONS: readonly Migration[] = [
   learningRecords,
   classInvitations,
   workflowTraces,
+  courseFileIndex,
 ];

@@ -10,6 +10,12 @@ export interface StudyMessage {
   readonly content: string;
 }
 
+export interface StudyDocument {
+  readonly documentId: string;
+  readonly title: string;
+  readonly text: string;
+}
+
 export interface StudyRequest {
   readonly userId: string;
   readonly courseId: string;
@@ -17,6 +23,7 @@ export interface StudyRequest {
   readonly courseTitle: string;
   readonly syllabus: string;
   readonly materialVersion: number;
+  readonly documents?: readonly StudyDocument[];
   readonly history: readonly StudyMessage[];
 }
 
@@ -276,6 +283,15 @@ export class PythonAIServiceClient implements AIServiceClient {
       course_title: request.courseTitle,
       syllabus: request.syllabus,
       material_version: request.materialVersion,
+      ...(request.documents === undefined
+        ? {}
+        : {
+            documents: request.documents.map((document) => ({
+              document_id: document.documentId,
+              title: document.title,
+              text: document.text,
+            })),
+          }),
       history: request.history,
     };
   }

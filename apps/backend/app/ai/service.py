@@ -24,6 +24,7 @@ from app.ai.schemas.models import (
     CourseDiagnosticReport,
     CourseDocumentInput,
     CourseIndexResult,
+    CourseTextInput,
     DocumentFormat,
     DocumentSection,
     HumanReviewItem,
@@ -216,6 +217,63 @@ class AIService:
             document_ids=document_ids,
             document_count=len(document_list),
             section_count=len(all_sections),
+            chunk_count=len(chunks),
+        )
+
+    def replace_course_texts(
+        self,
+        *,
+        course_id: str,
+        documents: Sequence[CourseTextInput],
+    ) -> CourseIndexResult:
+        """Atomically index all trusted extracted text for one course."""
+
+        normalized_course_id = course_id.strip()
+        if not normalized_course_id:
+            raise ValueError("course_id cannot be empty.")
+
+        document_list = list(documents)
+        if not document_list:
+            raise ValueError("At least one course document is required.")
+
+        document_ids = [document.document_id.strip() for document in document_list]
+        if any(not document_id for document_id in document_ids):
+            raise ValueError("document_id cannot be empty.")
+        if len(document_ids) != len(set(document_ids)):
+            raise ValueError("Document IDs must be unique within a course.")
+
+        sections = []
+        for document, document_id in zip(document_list, document_ids, strict=True):
+            title = document.title.strip()
+            text = document.text.strip()
+            if not title:
+                raise ValueError("title cannot be empty.")
+            if not text:
+                raise ValueError("text cannot be empty.")
+            sections.append(
+                DocumentSection(
+                    document_id=document_id,
+                    title=title,
+                    format=DocumentFormat.TEXT,
+                    section_index=1,
+                    text=text,
+                )
+            )
+
+        chunks = chunk_sections(
+            sections=sections,
+            chunk_size_words=self._chunk_size_words,
+            overlap_words=self._overlap_words,
+        )
+        if not chunks:
+            raise ValueError("The course text produced no searchable chunks.")
+
+        self._retriever.replace_course(normalized_course_id, chunks)
+        return CourseIndexResult(
+            course_id=normalized_course_id,
+            document_ids=document_ids,
+            document_count=len(document_list),
+            section_count=len(sections),
             chunk_count=len(chunks),
         )
 

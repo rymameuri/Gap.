@@ -267,6 +267,7 @@ test("adopts the early learning-records migration without losing existing data",
       "0004-gap-resolutions",
       "0006-class-invitations",
       "0007-workflow-traces",
+      "0008-course-file-index",
     ],
   });
   assert.deepEqual(appliedMigrations(store), IDS);
@@ -292,7 +293,7 @@ test("adopts early workflow traces after installing class invitations", async ()
   );
   assert.deepEqual(migrate(store), {
     adopted: ["0007-workflow-traces"],
-    applied: ["0006-class-invitations"],
+    applied: ["0006-class-invitations", "0008-course-file-index"],
   });
   assert.deepEqual(appliedMigrations(store), IDS);
   assert.equal(

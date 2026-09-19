@@ -26,6 +26,7 @@ from app.ai.schemas.models import (
     AgentRequest,
     AgentName,
     ChatMessage,
+    CourseTextInput,
     HumanReviewItem,
     SourceReference,
     UserRole,
@@ -48,6 +49,14 @@ class SharedAIService(Protocol):
     ) -> Any:
         ...
 
+    def replace_course_texts(
+        self,
+        *,
+        course_id: str,
+        documents: Sequence[CourseTextInput],
+    ) -> Any:
+        ...
+
     async def run(self, request: AgentRequest) -> WorkflowResponse:
         ...
 
@@ -62,6 +71,7 @@ class StudyRequest(BaseModel):
     course_title: str = Field(min_length=1, max_length=300)
     syllabus: str = Field(min_length=1, max_length=50_000)
     material_version: int = Field(ge=1)
+    documents: list[CourseTextInput] = Field(default_factory=list, max_length=20)
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
 
 
@@ -151,19 +161,35 @@ def create_app(
             "AI_INTERNAL_TOKEN must contain at least 32 characters."
         )
 
-    indexed_versions: dict[str, int] = {}
+    indexed_versions: dict[str, tuple[int, tuple[str, ...]]] = {}
 
     def ensure_course_index(request: StudyRequest) -> None:
-        if indexed_versions.get(request.course_id) == request.material_version:
+        document_ids = tuple(document.document_id for document in request.documents)
+        index_key = (request.material_version, document_ids)
+        if indexed_versions.get(request.course_id) == index_key:
             return
 
-        shared_service.replace_course_text(
-            course_id=request.course_id,
-            document_id="syllabus",
-            title=f"{request.course_title} syllabus",
-            text=request.syllabus,
-        )
-        indexed_versions[request.course_id] = request.material_version
+        if not request.documents:
+            shared_service.replace_course_text(
+                course_id=request.course_id,
+                document_id="syllabus",
+                title=f"{request.course_title} syllabus",
+                text=request.syllabus,
+            )
+        else:
+            documents = [
+                CourseTextInput(
+                    document_id="syllabus",
+                    title=f"{request.course_title} syllabus",
+                    text=request.syllabus,
+                ),
+                *request.documents,
+            ]
+            shared_service.replace_course_texts(
+                course_id=request.course_id,
+                documents=documents,
+            )
+        indexed_versions[request.course_id] = index_key
 
     def study_agent_request(request: StudyRequest) -> AgentRequest:
         return AgentRequest(

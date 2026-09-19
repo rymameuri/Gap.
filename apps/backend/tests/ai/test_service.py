@@ -11,6 +11,7 @@ from app.ai.schemas.models import (
     AgentName,
     AgentRequest,
     CourseDocumentInput,
+    CourseTextInput,
     UserRole,
 )
 from app.ai.service import AIService
@@ -145,6 +146,31 @@ def test_indexes_trusted_plain_text() -> None:
     assert result.section_count == 1
     assert result.chunk_count >= 1
     assert service.course_chunk_count("physics-101") == result.chunk_count
+
+
+def test_indexes_multiple_trusted_text_documents() -> None:
+    service = AIService(llm_client=FakeLLMClient())
+
+    result = service.replace_course_texts(
+        course_id="physics-101",
+        documents=[
+            CourseTextInput(
+                document_id="lecture-1",
+                title="Lecture 1",
+                text="Vectors and force are covered in lecture one.",
+            ),
+            CourseTextInput(
+                document_id="lecture-2",
+                title="Lecture 2",
+                text="Momentum and collisions are covered in lecture two.",
+            ),
+        ],
+    )
+
+    assert result.document_ids == ["lecture-1", "lecture-2"]
+    assert result.document_count == 2
+    assert result.section_count == 2
+    assert result.chunk_count >= 2
 
 
 def test_runs_grounded_study_workflow(

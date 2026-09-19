@@ -71,6 +71,11 @@ CREATE TABLE course_files(
       created_at TEXT NOT NULL
     );
 
+CREATE TABLE course_file_text(
+      file_id TEXT PRIMARY KEY REFERENCES course_files(id) ON DELETE CASCADE,
+      text TEXT NOT NULL
+    );
+
 CREATE TABLE events(
   id TEXT PRIMARY KEY,
   class_id TEXT REFERENCES classes(id),

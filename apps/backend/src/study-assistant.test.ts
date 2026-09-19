@@ -55,8 +55,11 @@ class FakeAIService implements AIServiceClient {
     return this.response();
   }
 
-  extractDocument() {
-    return Promise.resolve({ text: "Course material text.", sectionCount: 1 });
+  extractDocument(_filename: string, content: Uint8Array) {
+    return Promise.resolve({
+      text: new TextDecoder().decode(content),
+      sectionCount: 1,
+    });
   }
 
   modelJSON(): Promise<unknown> {
@@ -146,6 +149,59 @@ describe("student Study Assistant", () => {
             .body as object,
           "workflows",
         ),
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("includes every uploaded lecture in the trusted AI course index input", async () => {
+    const ai = new FakeAIService();
+    const server = await startTestServer({}, ai);
+    try {
+      const teacher = await server.login("teacher@gap.demo");
+      const student = await server.login("student@gap.demo");
+      for (const [filename, text] of [
+        ["lecture-1.txt", "Lecture one covers vectors and force."],
+        ["lecture-2.txt", "Lecture two covers momentum and collisions."],
+      ] as const) {
+        const upload = await server.request(
+          `/api/teacher/classes/physics/files?filename=${filename}`,
+          {
+            method: "POST",
+            cookie: teacher,
+            headers: { "Content-Type": "application/octet-stream" },
+            rawBody: text,
+          },
+        );
+        assert.equal(upload.status, 201);
+        assert.equal((upload.body as { status: string }).status, "indexed");
+      }
+
+      const asked = await server.request(
+        "/api/student/classes/physics/assistant",
+        {
+          method: "POST",
+          cookie: student,
+          body: { message: "Explain the lectures" },
+        },
+      );
+      assert.equal(asked.status, 200);
+      assert.deepEqual(
+        ai.requests[0]?.documents?.map((document) => ({
+          title: document.title,
+          text: document.text,
+        })),
+        [
+          {
+            title: "lecture-1.txt",
+            text: "Lecture one covers vectors and force.",
+          },
+          {
+            title: "lecture-2.txt",
+            text: "Lecture two covers momentum and collisions.",
+          },
+        ],
       );
     } finally {
       await server.close();
@@ -444,7 +500,6 @@ describe("student Study Assistant", () => {
       await server.close();
     }
   });
-
 
   test("streams progressive updates and finishes with the same safe response", async () => {
     const ai = new FakeAIService();

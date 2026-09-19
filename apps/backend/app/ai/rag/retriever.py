@@ -81,10 +81,42 @@ class InMemoryCourseRetriever:
             raise ValueError("limit must be greater than zero.")
 
         chunks = self._chunks_by_course.get(course_id, [])
+        if len(chunks) <= limit:
+            selected = chunks
+        else:
+            groups: list[list[RetrievedChunk]] = []
+            positions: dict[str, int] = {}
+            for chunk in chunks:
+                document_id = chunk.source.document_id
+                position = positions.get(document_id)
+                if position is None:
+                    positions[document_id] = len(groups)
+                    groups.append([chunk])
+                else:
+                    groups[position].append(chunk)
+
+            per_document = max(1, limit // len(groups))
+            selected = []
+            for group in groups:
+                selected.extend(group[:per_document])
+            selected = selected[:limit]
+
+            offset = per_document
+            while len(selected) < limit:
+                added = False
+                for group in groups:
+                    if offset < len(group):
+                        selected.append(group[offset])
+                        added = True
+                        if len(selected) == limit:
+                            break
+                if not added:
+                    break
+                offset += 1
 
         return [
             chunk.model_copy(update={"relevance_score": None})
-            for chunk in chunks[:limit]
+            for chunk in selected
         ]
 
     def search(
