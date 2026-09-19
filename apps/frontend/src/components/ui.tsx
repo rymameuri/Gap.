@@ -98,7 +98,7 @@ export function EngineNote({ engine }: { engine: string }) {
   return (
     <p className="notice">
       {engine === "live-ai"
-        ? "Live AI connected"
+        ? "Live AI configured"
         : "Local teaching engine · Connect a model to generate beyond the physics teaching bank"}{" "}
       · Data saved in SQLite
     </p>

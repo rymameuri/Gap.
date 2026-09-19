@@ -352,7 +352,12 @@ export function Assessments() {
       async () => {
         await put("/teacher/quizzes/" + draft.id, {
           title: draft.title,
-          questions: draft.questions,
+          questions: draft.questions.map((question) => ({
+            ...question,
+            keywords: question.keywords
+              ?.map((keyword) => keyword.trim())
+              .filter(Boolean),
+          })),
         });
         if (publish) await post("/teacher/quizzes/" + draft.id + "/publish");
         await refresh();
@@ -506,6 +511,32 @@ export function Assessments() {
                       <option key={o}>{o}</option>
                     ))}
                   </select>
+                </>
+              )}
+              {q.kind === "text" && (
+                <>
+                  <label className="field" htmlFor={"answer-" + q.id}>
+                    Expected answer
+                  </label>
+                  <textarea
+                    id={"answer-" + q.id}
+                    value={q.correctAnswer ?? ""}
+                    onChange={(e) =>
+                      updateQuestion(q.id, { correctAnswer: e.target.value })
+                    }
+                  />
+                  <label className="field" htmlFor={"keywords-" + q.id}>
+                    Grading keywords (one per line)
+                  </label>
+                  <textarea
+                    id={"keywords-" + q.id}
+                    value={(q.keywords ?? []).join("\n")}
+                    onChange={(e) =>
+                      updateQuestion(q.id, {
+                        keywords: e.target.value.split("\n"),
+                      })
+                    }
+                  />
                 </>
               )}
               <label className="field" htmlFor={"rubric-" + q.id}>
