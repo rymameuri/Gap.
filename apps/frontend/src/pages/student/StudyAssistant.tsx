@@ -20,6 +20,7 @@ import type { StudyAssistantResponse } from "../../services/types";
 import { courseTopics, errorMessage } from "./course-model";
 import { useStudyDrafts, type StudyDraft } from "./useStudyDrafts";
 import { MaterialReader } from "./components/MaterialReader";
+import { AssistantAnswer } from "./components/AssistantAnswer";
 import { SpeechInputButton } from "../../components/SpeechInputButton";
 import { appendSpeechTranscript } from "../../components/speech-recognition";
 
@@ -230,7 +231,7 @@ export function StudyAssistant() {
                       </span>
                       <div>
                         <span className="s-kicker">Study Assistant</span>
-                        <p>{turn.response.content}</p>
+                        <AssistantAnswer content={turn.response.content} />
                         {turn.response.requiresHumanReview && (
                           <p className="s-assistant-review-note">
                             Your instructor needs to review this request before

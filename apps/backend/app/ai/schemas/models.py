@@ -35,7 +35,7 @@ class ReviewAction(str, Enum):
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=16_000)
 
 
 class AgentRequest(BaseModel):
@@ -109,7 +109,7 @@ class DocumentSection(BaseModel):
 class StudyAgentOutput(BaseModel):
     """Structured output produced by the Study Agent."""
 
-    answer: str = Field(min_length=1, max_length=10_000)
+    answer: str = Field(min_length=1, max_length=16_000)
     used_source_ids: list[str] = Field(default_factory=list)
 
 class WorkflowResponse(BaseModel):

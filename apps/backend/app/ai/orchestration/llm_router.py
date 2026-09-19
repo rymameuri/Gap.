@@ -109,6 +109,17 @@ async def route_request_intelligently(
     if not deterministic.requires_clarification:
         return deterministic
 
+    if request.metadata.get("channel") == "study_assistant":
+        return RouteDecision(
+            intent=Intent.ANSWER_QUESTION,
+            target_agent=AgentName.STUDY,
+            requires_clarification=False,
+            reason=(
+                "Open-ended Study Assistant request; use the grounded "
+                "course Study Agent."
+            ),
+        )
+
     try:
         client = llm_client or QuantumBlackLLMClient()
 

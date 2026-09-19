@@ -323,3 +323,48 @@ def test_rejects_duplicate_document_ids(
                 ),
             ],
         )
+
+
+def test_full_course_request_uses_all_indexed_course_chunks() -> None:
+    llm_client = FakeLLMClient()
+    service = AIService(
+        llm_client=llm_client,
+        chunk_size_words=6,
+        overlap_words=1,
+    )
+    index = service.replace_course_text(
+        course_id="physics-101",
+        document_id="syllabus",
+        title="Physics syllabus",
+        text=(
+            "Unit one introduces force acceleration inertia. "
+            "Unit two covers momentum impulse collisions. "
+            "Unit three covers work energy power conservation."
+        ),
+    )
+
+    response = asyncio.run(
+        service.run(
+            make_request(
+                "physics-101",
+                "Explain the full course from beginning to end.",
+            )
+        )
+    )
+
+    assert response.route.target_agent == AgentName.STUDY
+    assert response.result.metadata["scope"] == "course_overview"
+    assert response.result.metadata["retrieved_count"] == index.chunk_count
+    assert llm_client.calls[-1]["max_completion_tokens"] == 3_000
+    prompt = llm_client.calls[-1]["messages"][1]["content"]
+    for term in (
+        "force",
+        "acceleration",
+        "momentum",
+        "impulse",
+        "collisions",
+        "work",
+        "energy",
+        "conservation",
+    ):
+        assert term in prompt

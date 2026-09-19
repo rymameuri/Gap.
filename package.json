@@ -15,7 +15,7 @@
     "start": "node apps/backend/build/index.js",
     "test": "node --import tsx --test \"apps/backend/src/**/*.test.ts\" \"apps/backend/tools/**/*.test.ts\"",
     "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=\"apps/backend/src/**\" --test-coverage-include=\"apps/backend/tools/**\" --test-coverage-exclude=\"**/*.test.ts\" --test-coverage-exclude=\"apps/backend/src/agents/**\" --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=95 \"apps/backend/src/**/*.test.ts\" \"apps/backend/tools/**/*.test.ts\"",
-    "test:student": "node --import tsx --test apps/frontend/src/pages/student/course-model.test.ts apps/frontend/src/components/speech-recognition.test.ts",
+    "test:student": "node --import tsx --test apps/frontend/src/pages/student/course-model.test.ts apps/frontend/src/pages/student/assistant-format.test.ts apps/frontend/src/components/speech-recognition.test.ts",
     "format": "prettier --write --end-of-line auto \"apps/**/*.{ts,tsx,css,html,md}\" \"docs/*.md\" README.md package.json dev-server.mjs",
     "typecheck:backend": "tsc --noEmit -p apps/backend/tsconfig.test.json",
     "lint:backend": "eslint apps/backend",

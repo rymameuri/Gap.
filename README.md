@@ -1,6 +1,6 @@
-# Manara
+# GAP.
 
-Manara is a course-specific learning platform for university teachers and students. It finds the misconceptions behind students' wrong answers, groups them across a class, and helps the teacher close them with targeted explanations and follow-up checks. AI drafts quizzes, grades and explanations; the teacher approves anything a student sees.
+GAP. is a course-specific learning platform for university teachers and students. It finds the misconceptions behind students' wrong answers, groups them across a class, and helps the teacher close them with targeted explanations and follow-up checks. AI drafts quizzes, grades and explanations; the teacher approves anything a student sees.
 
 ## How it works
 
@@ -159,10 +159,16 @@ npm start
 ```
 
 `npm start` migrates the database and serves the API and the built client from one process. Set `NODE_ENV=production`, `DEMO_PASSWORD`, and a `DATABASE_PATH` on persistent storage. Behind a load balancer, set `TRUST_PROXY`. The operations runbook is in [apps/backend/README.md](apps/backend/README.md#operations).
-
 ## Current limitations
 
 - One API process per database file: SQLite is held in memory and written to disk on each change, and background jobs run in process. Horizontal scaling needs a shared database and an external job queue.
+
 - The AI service keeps its retrieval index in memory and rebuilds it when course material changes.
-- The AI service can parse PDF, Word and PowerPoint files, but uploading and storing source documents through the client is not implemented yet. Retrieval currently uses the class syllabus.
+
+- Teachers can import TXT, PDF, DOCX and PPTX course materials through the client. The extracted text is saved as course material, but the original uploaded documents are not persisted as separate document records.
+
+- Scanned or image-only PDFs require OCR before import; OCR is not implemented yet.
+
 - There is no self-service registration or password reset.
+
+- There is no real school roster integration yet.

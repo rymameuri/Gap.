@@ -72,6 +72,24 @@ def test_student_cannot_access_class_wide_analytics() -> None:
     assert decision.target_agent == AgentName.ORCHESTRATOR
 
 
+
+def test_full_course_request_routes_directly_to_study_agent() -> None:
+    decision = route_request(make_request("Full course from start to finish"))
+
+    assert decision.intent == Intent.EXPLAIN_TOPIC
+    assert decision.target_agent == AgentName.STUDY
+    assert decision.requires_clarification is False
+
+
+def test_natural_study_request_routes_without_llm_fallback() -> None:
+    decision = route_request(
+        make_request("Compare momentum and force using the course material")
+    )
+
+    assert decision.intent == Intent.ANSWER_QUESTION
+    assert decision.target_agent == AgentName.STUDY
+    assert decision.requires_clarification is False
+
 def test_unknown_request_requires_clarification() -> None:
     decision = route_request(make_request("Hello there"))
 

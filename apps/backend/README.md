@@ -185,3 +185,11 @@ There is no suppression baseline. A rule may be relaxed only with an inline `esl
 ### Git hooks
 
 `npm ci` sets `core.hooksPath` to `.githooks`. The `pre-commit` hook scans staged backend files, and `commit-msg` checks the message of any commit that touches backend files. Commits that only touch frontend files are not checked.
+
+## Importing course documents
+
+Teacher Class materials accepts PDF, DOCX, PPTX and TXT. Binary documents are sent through an authenticated, class-owner-only Express endpoint to the private Python document reader. The extracted text replaces the editor preview; it is persisted only after the teacher selects Save materials. Failed imports keep the previous text.
+
+The file limit is 25 MiB. The current editor and course API allow 50,000 UTF-16 code units of text, so larger documents must be split. Password-protected PDFs and image-only scans are rejected with an explanation; OCR is not included. Older DOC and PPT files must be exported to DOCX or PPTX. Original files are not retained: text, including page/slide labels, is saved in the existing syllabus field. This import flow does not add a document library or separate page-level citation metadata.
+
+Run `npm run dev` with `AI_SERVICE_URL` and `AI_INTERNAL_TOKEN` configured to start the reader with the app. Reading documents does not call the LLM. Existing text-file imports can also run directly in the browser.
